@@ -645,7 +645,8 @@ en:{
   err_cors_generic:'Network/CORS error \u2014 this endpoint may not allow direct requests from a browser page, or the URL/network connection is unreachable.',
   err_response_not_json:'Response was not valid JSON: {text}', err_empty_response:'Empty response from model',
   err_translations_missing:'Response did not contain a "translations" array',
-  err_model_count_mismatch:'Model returned {got} line(s), expected {expected}'
+  err_model_count_mismatch:'Model returned {got} line(s), expected {expected}',
+  err_lines_missing:'The model did not return a translation for {missing} of {total} line(s) after multiple attempts.'
 },
 fa:{
   theme_toggle:'تغییر تم', settings_open:'باز کردن تنظیمات', lang_toggle:'تغییر زبان',
@@ -714,7 +715,8 @@ fa:{
   err_cors_generic:'خطای شبکه/CORS — این اتصال ممکن است اجازه درخواست مستقیم از یک صفحه مرورگر را ندهد، یا آدرس/اتصال شبکه در دسترس نیست.',
   err_response_not_json:'پاسخ، JSON معتبر نبود: {text}', err_empty_response:'پاسخ خالی از مدل دریافت شد',
   err_translations_missing:'پاسخ شامل آرایه «translations» نبود',
-  err_model_count_mismatch:'مدل {got} خط برگرداند، در حالی که {expected} خط مورد انتظار بود'
+  err_model_count_mismatch:'مدل {got} خط برگرداند، در حالی که {expected} خط مورد انتظار بود',
+  err_lines_missing:'مدل پس از چند تلاش، ترجمه {missing} خط از {total} خط را برنگرداند.'
 }
 };
 function t(key, vars){
@@ -867,6 +869,15 @@ const CacheStore = {
       r.onerror = ()=>reject(r.error);
     });
   },
+  async delete(cacheKey){
+    const db = await this.openDB();
+    return new Promise((resolve,reject)=>{
+      const tx = db.transaction('translations','readwrite');
+      tx.objectStore('translations').delete(cacheKey);
+      tx.oncomplete = ()=>resolve(true);
+      tx.onerror = ()=>reject(tx.error);
+    });
+  },
   async clearAll(){
     const db = await this.openDB();
     return new Promise((resolve,reject)=>{
@@ -889,6 +900,12 @@ async function saveFileToCache(file){
       updatedAt: Date.now()
     });
   }catch(e){ console.warn('cache save failed', e); }
+}
+async function clearFileCache(file){
+  if(!file.fingerprint) return;
+  try{
+    await CacheStore.delete(cacheKeyFor(file.fingerprint, state.settings.targetLanguage));
+  }catch(e){ console.warn('cache clear failed', e); }
 }
 
 /* ============================================================
@@ -1326,6 +1343,7 @@ function downloadFile(id){
   const file = getFile(id); if(!file) return;
   const content = getFileContent(file);
   saveBlob(new Blob([content], {type:'text/plain;charset=utf-8'}), exportFilename(file));
+  clearFileCache(file);
 }
 
 async function downloadAllZip(){
@@ -1335,6 +1353,7 @@ async function downloadAllZip(){
   const blob = await zip.generateAsync({type:'blob'});
   saveBlob(blob, 'NeoSubTranslator_export.zip');
   toast(t('toast_zip_downloaded'), 'success');
+  state.files.forEach(f=> clearFileCache(f));
 }
 
 /* ============================================================
@@ -1368,14 +1387,14 @@ function buildInstructions(file){
   parts.push(s.explicit
     ? `Translate mature, profane, or explicit content faithfully and without censorship or softening — preserve the original register exactly.`
     : `Keep the translation faithful; do not add content beyond what the source expresses.`);
-  parts.push(`Keep each translated line concise enough for on-screen subtitles. Preserve line breaks within a line using \\n. Do not merge, split, reorder, or omit lines — return exactly one translation per input line, in the same order.`);
+  parts.push(`Keep each translated line concise enough for on-screen subtitles. Preserve line breaks within a line using \\n. Do not merge, split, or reorder lines.`);
   if(file.format==='ass'){
     parts.push(`The source may contain ASS/SSA override tags in curly braces like {\\i1} or {\\pos(x,y)} — keep these tags unchanged and only translate the natural-language text around them.`);
   }
   if(s.extraInstructions && s.extraInstructions.trim()){
     parts.push(`Additional instructions from the user: ${s.extraInstructions.trim()}`);
   }
-  parts.push(`Respond with ONLY a JSON object of the exact form {"translations": ["...", "..."]} with no markdown formatting, no code fences, and no commentary outside the JSON.`);
+  parts.push(`The input is a JSON object whose keys are line numbers (as strings) and whose values are that line's subtitle text. Respond with ONLY a JSON object of the exact form {"translations": {"<line number>": "<translation>", ...}}, reusing the exact same keys you were given — one translation per key, every key included, none added, removed, or renumbered. No markdown formatting, no code fences, and no commentary outside the JSON.`);
   return parts.join(' ');
 }
 
@@ -1385,8 +1404,23 @@ function parseModelJSON(raw, expectedCount){
   const first = s.indexOf('{'); const last = s.lastIndexOf('}');
   if(first!==-1 && last!==-1 && last>first) s = s.slice(first, last+1);
   const obj = JSON.parse(s);
-  if(!obj || !Array.isArray(obj.translations)) throw new Error(t('err_translations_missing'));
-  return obj.translations.map(x=> x==null ? '' : String(x));
+  if(!obj || obj.translations==null) throw new Error(t('err_translations_missing'));
+  const tr = obj.translations;
+  const out = new Array(expectedCount).fill(undefined);
+  if(Array.isArray(tr)){
+    for(let i=0;i<Math.min(expectedCount, tr.length);i++){
+      if(typeof tr[i]==='string' && tr[i].trim()!=='') out[i] = tr[i];
+    }
+  } else if(typeof tr==='object'){
+    Object.keys(tr).forEach(k=>{
+      const idx = parseInt(k,10)-1;
+      const v = tr[k];
+      if(idx>=0 && idx<expectedCount && typeof v==='string' && v.trim()!=='') out[idx] = v;
+    });
+  } else {
+    throw new Error(t('err_translations_missing'));
+  }
+  return out;
 }
 
 function getActiveProfile(){
@@ -1429,8 +1463,11 @@ function parseSSEChatContent(raw){
 
 async function callTranslateAPI(profile, apiKey, lines, instructions){
   const endpoint = (profile.endpoint||'').replace(/\/+$/,'');
-  const payload = JSON.stringify(lines);
-  const userPrompt = `${instructions}\n\nTranslate this JSON array of ${lines.length} subtitle line(s):\n${payload}`;
+  const indexed = {};
+  lines.forEach((l,i)=>{ indexed[String(i+1)] = l; });
+  const payload = JSON.stringify(indexed);
+  const userText = `Translate this JSON object of ${lines.length} subtitle line(s):\n${payload}`;
+  const userPrompt = `${instructions}\n\n${userText}`;
 
   try{
     if(isGeminiStyle(profile.type)){
@@ -1453,7 +1490,7 @@ async function callTranslateAPI(profile, apiKey, lines, instructions){
         model: profile.model,
         messages:[
           {role:'system', content: instructions},
-          {role:'user', content: `Translate this JSON array of ${lines.length} subtitle line(s):\n${payload}`}
+          {role:'user', content: userText}
         ],
         temperature:0.4,
         stream: false
@@ -1495,15 +1532,41 @@ async function translateBlock(file, block){
 
   block.status = 'translating'; block.error = null;
   renderTranslatePanel();
+
+  const baseInstructions = buildInstructions(file);
+  const retryNote = ' IMPORTANT: A previous attempt was missing translations for some of these exact lines — this request contains only those missing lines, renumbered starting at 1. You must include every single key in your response, with no omissions.';
+
+  let pending = block.entries.slice();
+  let lastErr = null;
+  const maxAttempts = 3;
   try{
-    const instructions = buildInstructions(file);
-    const lines = block.entries.map(e=>e.text);
-    const result = await callTranslateAPI(profile, apiKey, lines, instructions);
-    if(result.length !== block.entries.length){
-      throw new Error(t('err_model_count_mismatch', {got:result.length, expected:block.entries.length}));
+    for(let attempt=1; attempt<=maxAttempts && pending.length; attempt++){
+      const instructions = attempt===1 ? baseInstructions : baseInstructions + retryNote;
+      const lines = pending.map(e=>e.text);
+      let result;
+      try{
+        result = await callTranslateAPI(profile, apiKey, lines, instructions);
+      }catch(err){
+        lastErr = err;
+        break;
+      }
+      const stillMissing = [];
+      pending.forEach((e,i)=>{
+        const v = result[i];
+        if(typeof v === 'string' && v.trim()!==''){ e.translated = v; }
+        else stillMissing.push(e);
+      });
+      pending = stillMissing;
+      if(pending.length && attempt<maxAttempts) await sleep(400);
     }
-    block.entries.forEach((e,i)=>{ e.translated = result[i]; });
-    block.status = 'done';
+    if(pending.length){
+      block.status = 'error';
+      block.error = lastErr ? (lastErr.message || String(lastErr)) : t('err_lines_missing', {missing:pending.length, total:block.entries.length});
+      toast(t('toast_block_failed', {msg:block.error}), 'error');
+    } else {
+      block.status = 'done';
+      block.error = null;
+    }
     saveFileToCache(file);
   }catch(err){
     block.status = 'error';
