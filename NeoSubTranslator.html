@@ -1,0 +1,1886 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeoSubTranslator</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='2' y='2' width='60' height='60' rx='16' fill='%23101626'/%3E%3Cpath d='M13 18h30a6 6 0 0 1 6 6v13a6 6 0 0 1-6 6H26l-8 7v-7h-5a6 6 0 0 1-6-6V24a6 6 0 0 1 6-6z' fill='%23FFD166'/%3E%3Crect x='19' y='27' width='17' height='4' rx='2' fill='%23101626'/%3E%3Crect x='19' y='35' width='24' height='4' rx='2' fill='%23101626'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Vazirmatn:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* ============================= TOKENS ============================= */
+:root{
+  --font-body:'Manrope',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,monospace;
+  --radius-sm:8px; --radius-md:14px; --radius-lg:20px;
+}
+html[lang="fa"]{
+  --font-body:'Vazirmatn','Manrope',system-ui,sans-serif;
+}
+html[dir="rtl"] .rtl-flip{ transform:scaleX(-1); }
+html[dir="rtl"] .badge-count{ margin-left:0; margin-right:6px; }
+html[data-theme="dark"]{
+  --bg:#0B0F17; --bg-elev:#10151F; --panel:#141A26; --panel-2:#1B2333;
+  --border:#262F42; --border-soft:#1E2637;
+  --text:#E8ECF4; --text-dim:#8B93A7; --text-faint:#5B6478;
+  --accent:#FFD166; --accent-ink:#201A05; --accent-soft:#3A2F0F;
+  --accent2:#3FD0C9; --accent2-ink:#062421;
+  --danger:#FF6B6B; --danger-soft:#3A1A1A; --success:#5FD97A; --success-soft:#123321;
+  --shadow:0 10px 30px rgba(0,0,0,.4); --overlay:rgba(6,8,13,.6);
+  --scrim: rgba(255,255,255,.04);
+}
+html[data-theme="light"]{
+  --bg:#F3F5F9; --bg-elev:#FFFFFF; --panel:#FFFFFF; --panel-2:#F0F2F7;
+  --border:#E1E5EE; --border-soft:#EAEDF3;
+  --text:#161B26; --text-dim:#5B6478; --text-faint:#8992A6;
+  --accent:#C98A00; --accent-ink:#FFF7E6; --accent-soft:#FCEFD2;
+  --accent2:#0E9E96; --accent2-ink:#EAFBF9;
+  --danger:#D93B3B; --danger-soft:#FBE7E7; --success:#1E9E52; --success-soft:#E5F6EB;
+  --shadow:0 10px 30px rgba(20,26,38,.10); --overlay:rgba(20,26,38,.35);
+  --scrim: rgba(10,14,22,.03);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:var(--bg); color:var(--text); font-family:var(--font-body);
+  -webkit-font-smoothing:antialiased; min-height:100vh;
+}
+button,input,select,textarea{font-family:inherit; color:inherit;}
+button{cursor:pointer;}
+::selection{background:var(--accent); color:var(--accent-ink);}
+@media (prefers-reduced-motion: reduce){ *{animation-duration:.001ms !important; transition-duration:.001ms !important;} }
+a{color:var(--accent2);}
+
+/* ============================= LAYOUT ============================= */
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 24px; background:var(--bg-elev); border-bottom:1px solid var(--border-soft);
+  position:sticky; top:0; z-index:20;
+}
+.brand{display:flex; align-items:center; gap:10px;}
+.brand svg{width:34px; height:34px; flex:none;}
+.brand .wordmark{font-family:var(--font-mono); font-weight:700; font-size:17px; letter-spacing:.2px;}
+.brand .wordmark b{color:var(--accent);}
+.topbar-actions{display:flex; align-items:center; gap:8px;}
+.icon-btn{
+  width:38px; height:38px; border-radius:10px; border:1px solid var(--border);
+  background:var(--panel); display:flex; align-items:center; justify-content:center;
+  transition:border-color .15s, transform .15s;
+}
+.icon-btn:hover{border-color:var(--accent2);}
+.icon-btn:active{transform:scale(.94);}
+.icon-btn svg{width:18px; height:18px;}
+
+.ruler{
+  height:12px; margin:0 24px;
+  background-image:repeating-linear-gradient(90deg, var(--border) 0 1px, transparent 1px 10px);
+  background-position:top left; background-repeat:repeat-x; background-size:100% 6px;
+  opacity:.7;
+}
+
+.steps{
+  display:flex; gap:6px; padding:16px 24px 0; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none;
+}
+.steps::-webkit-scrollbar{display:none;}
+.step{
+  position:relative; padding:10px 16px; border-radius:10px 10px 0 0; border:1px solid var(--border);
+  border-bottom:none; background:var(--panel-2); color:var(--text-dim); flex:none; white-space:nowrap;
+  font-family:var(--font-mono); font-size:13px; font-weight:600; letter-spacing:.3px;
+}
+.step.active{background:var(--panel); color:var(--text); border-color:var(--border);}
+.step.active::after{
+  content:""; position:absolute; left:50%; bottom:-1px; transform:translateX(-50%);
+  border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:6px solid var(--accent);
+}
+.step .badge-count{
+  display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px;
+  border-radius:9px; background:var(--accent-soft); color:var(--accent); font-size:10px; margin-left:6px; padding:0 5px;
+}
+
+main{padding:0 24px 60px; max-width:1180px; margin:0 auto;}
+.panel{
+  display:none; background:var(--panel); border:1px solid var(--border); border-top:none;
+  border-radius:0 0 var(--radius-lg) var(--radius-lg); padding:28px; box-shadow:var(--shadow);
+}
+.panel.active{display:block; animation:fadein .25s ease;}
+@keyframes fadein{from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;}}
+
+.section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:18px; flex-wrap:wrap; gap:10px;}
+.section-head h2{margin:0; font-size:19px; font-weight:800;}
+.section-head p{margin:2px 0 0; color:var(--text-dim); font-size:13px;}
+
+.eyebrow{font-family:var(--font-mono); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent2); font-weight:600;}
+
+/* ============================= BUTTONS ============================= */
+.btn{
+  display:inline-flex; align-items:center; gap:8px; padding:10px 16px; border-radius:10px;
+  border:1px solid var(--border); background:var(--panel-2); font-size:13.5px; font-weight:700;
+  transition:border-color .15s, transform .1s, background .15s; white-space:nowrap;
+}
+.btn:hover{border-color:var(--accent2);}
+.btn:active{transform:scale(.97);}
+.btn:disabled{opacity:.4; cursor:not-allowed; transform:none;}
+.btn-primary{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
+.btn-primary:hover{filter:brightness(1.06); border-color:var(--accent);}
+.btn-accent2{background:var(--accent2); color:var(--accent2-ink); border-color:var(--accent2);}
+.btn-ghost{background:transparent;}
+.btn-danger{color:var(--danger); border-color:var(--danger-soft);}
+.btn-danger:hover{border-color:var(--danger);}
+.btn-sm{padding:6px 11px; font-size:12px; border-radius:8px;}
+.btn svg{width:14px; height:14px;}
+
+/* ============================= FILES PANEL ============================= */
+.dropzone{
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  border:1.5px dashed var(--border); border-radius:var(--radius-md); padding:34px 20px; text-align:center;
+  background:var(--scrim); transition:border-color .15s, background .15s; cursor:pointer; width:100%;
+}
+.dropzone.drag{border-color:var(--accent2); background:var(--accent-soft);}
+.dropzone svg{width:30px; height:30px; color:var(--text-faint); margin-bottom:8px;}
+.dropzone .dz-title{font-weight:700; font-size:14.5px;}
+.dropzone .dz-sub{color:var(--text-dim); font-size:12.5px; margin-top:4px;}
+.dropzone input{display:none;}
+
+.chunk-row{
+  display:flex; align-items:center; gap:12px; margin-top:18px; padding:14px 16px;
+  background:var(--panel-2); border:1px solid var(--border-soft); border-radius:var(--radius-md); flex-wrap:wrap;
+}
+.chunk-row label{font-size:13px; font-weight:600; color:var(--text-dim);}
+.chunk-row input[type=number]{
+  width:80px; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:var(--bg-elev);
+  font-family:var(--font-mono); font-weight:700; font-size:13.5px;
+}
+.chunk-row .hint{font-size:12px; color:var(--text-faint); margin-right:auto;}
+
+.file-list{list-style:none; margin:18px 0 0; padding:0; display:flex; flex-direction:column; gap:8px;}
+.file-row{
+  display:flex; align-items:center; gap:12px; padding:12px 14px; border:1px solid var(--border-soft);
+  border-radius:var(--radius-sm); background:var(--bg-elev);
+}
+.fmt-badge{
+  font-family:var(--font-mono); font-size:10.5px; font-weight:700; padding:4px 7px; border-radius:6px;
+  background:var(--accent-soft); color:var(--accent); letter-spacing:.5px;
+}
+.file-row .fname{font-weight:700; font-size:13.5px; flex:1; min-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.file-row .fmeta{font-size:12px; color:var(--text-dim); font-family:var(--font-mono);}
+.file-row .rm-btn{
+  width:26px; height:26px; border-radius:7px; border:1px solid var(--border); background:transparent;
+  color:var(--text-dim); display:flex; align-items:center; justify-content:center; flex:none;
+}
+.file-row .rm-btn:hover{color:var(--danger); border-color:var(--danger);}
+.empty-state{padding:30px 10px; text-align:center; color:var(--text-faint); font-size:13.5px;}
+.files-footer{display:flex; justify-content:space-between; align-items:center; margin-top:22px; gap:10px; flex-wrap:wrap;}
+
+/* ============================= TRANSLATE PANEL ============================= */
+.nav-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px;}
+.nav-row select{
+  flex:1; min-width:180px; padding:9px 10px; border-radius:9px; border:1px solid var(--border);
+  background:var(--bg-elev); font-size:13px; font-weight:600;
+}
+.actions-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:16px;}
+.actions-row .spacer{flex:1;}
+.status-pill{
+  font-family:var(--font-mono); font-size:11.5px; padding:6px 10px; border-radius:999px; border:1px solid var(--border);
+  color:var(--text-dim); display:inline-flex; align-items:center; gap:6px;
+}
+.status-pill.live{color:var(--accent2); border-color:var(--accent2);}
+.status-pill .dot{width:6px; height:6px; border-radius:50%; background:currentColor;}
+
+.progress{height:8px; border-radius:5px; background:var(--panel-2); overflow:hidden; margin-bottom:20px; border:1px solid var(--border-soft);}
+.progress-fill{height:100%; background:linear-gradient(90deg, var(--accent2), var(--accent)); width:0%; transition:width .3s ease;}
+.progress-label{font-size:12px; color:var(--text-dim); margin:-14px 0 18px; font-family:var(--font-mono);}
+
+table.tt{width:100%; border-collapse:separate; border-spacing:0 8px;}
+table.tt thead th{
+  text-align:left; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--text-faint);
+  padding:0 14px 6px; font-weight:700;
+}
+tr.block-head td{
+  background:var(--panel-2); padding:9px 14px; border-radius:9px; font-family:var(--font-mono); font-size:12px;
+  color:var(--text-dim); font-weight:600;
+}
+tr.block-head .bh-wrap{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+tr.block-head .bh-status{
+  padding:3px 9px; border-radius:999px; font-size:10.5px; font-weight:700; letter-spacing:.3px;
+}
+.bh-status.pending{background:var(--panel); color:var(--text-faint); border:1px solid var(--border);}
+.bh-status.translating{background:var(--accent-soft); color:var(--accent);}
+.bh-status.done{background:var(--success-soft); color:var(--success);}
+.bh-status.error{background:var(--danger-soft); color:var(--danger);}
+tr.block-head .bh-err{color:var(--danger); font-weight:500; font-family:var(--font-body);}
+tr.entry-row td{
+  vertical-align:top; padding:10px 14px; border-top:1px solid var(--border-soft); border-bottom:1px solid var(--border-soft);
+  background:var(--bg-elev); font-size:13.5px; line-height:1.5;
+}
+tr.entry-row td:first-child{border-left:1px solid var(--border-soft); border-radius:8px 0 0 8px; width:50%;}
+tr.entry-row td:last-child{border-right:1px solid var(--border-soft); border-radius:0 8px 8px 0; width:50%;}
+.entry-time{font-family:var(--font-mono); font-size:10.5px; color:var(--accent2); margin-bottom:4px; display:block;}
+.entry-orig{white-space:pre-wrap; word-break:break-word; text-align:start;}
+.entry-translated{
+  width:100%; min-height:44px; resize:vertical; border:1px solid transparent; background:transparent;
+  border-radius:6px; padding:4px 6px; font-size:13.5px; line-height:1.6; white-space:pre-wrap; text-align:start;
+}
+.entry-translated:hover{border-color:var(--border);}
+.entry-translated:focus{outline:none; border-color:var(--accent2); background:var(--panel-2);}
+.entry-translated::placeholder{color:var(--text-faint); font-style:italic;}
+
+/* ============================= DOWNLOAD PANEL ============================= */
+.dl-list{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px;}
+.dl-row{display:flex; align-items:center; gap:12px; padding:14px; border:1px solid var(--border-soft); border-radius:var(--radius-sm); background:var(--bg-elev);}
+.dl-row .fname{font-weight:700; font-size:13.5px; flex:1;}
+.dl-row .fmeta{font-size:12px; color:var(--text-dim); font-family:var(--font-mono);}
+.dl-zip-row{margin-top:20px; padding:18px; background:var(--panel-2); border:1px solid var(--border-soft); border-radius:var(--radius-md); display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+.dl-zip-row .txt{flex:1; min-width:200px;}
+.dl-zip-row .txt strong{display:block; font-size:14px;}
+.dl-zip-row .txt span{font-size:12.5px; color:var(--text-dim);}
+
+/* ============================= SETTINGS DRAWER ============================= */
+#drawerOverlay{position:fixed; inset:0; background:var(--overlay); z-index:40; opacity:0; pointer-events:none; transition:opacity .2s;}
+#drawerOverlay.show{opacity:1; pointer-events:auto;}
+.drawer{
+  position:fixed; top:0; right:0; height:100%; width:min(440px, 92vw); background:var(--bg-elev);
+  border-left:1px solid var(--border); z-index:41; transform:translateX(100%); transition:transform .25s ease;
+  display:flex; flex-direction:column;
+}
+.drawer.open{transform:translateX(0);}
+.drawer-header{display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--border-soft);}
+.drawer-header h3{margin:0; font-size:16px;}
+.drawer-header .saved-tag{font-size:11px; color:var(--success); font-family:var(--font-mono); opacity:0; transition:opacity .3s;}
+.drawer-header .saved-tag.show{opacity:1;}
+.drawer-tabs{display:flex; gap:4px; padding:12px 20px 0;}
+.drawer-tabs button{flex:1; padding:9px 8px; border-radius:8px 8px 0 0; border:1px solid var(--border); border-bottom:none; background:var(--panel-2); color:var(--text-dim); font-size:12.5px; font-weight:700;}
+.drawer-tabs button.active{background:var(--bg-elev); color:var(--text);}
+.drawer-body{flex:1; overflow-y:auto; padding:18px 20px 40px;}
+.dtab{display:none;}
+.dtab.active{display:block;}
+
+.field{margin-bottom:16px;}
+.field label{display:block; font-size:12.5px; font-weight:700; color:var(--text-dim); margin-bottom:6px;}
+.field .desc{font-size:11.5px; color:var(--text-faint); margin-top:5px; line-height:1.4;}
+.field input[type=text], .field input[type=password], .field input[type=number], .field select, .field textarea{
+  width:100%; padding:10px 12px; border-radius:9px; border:1px solid var(--border); background:var(--panel);
+  font-size:13px;
+}
+.field textarea{min-height:70px; resize:vertical; font-family:var(--font-body);}
+.field-row{display:flex; gap:10px;}
+.field-row .field{flex:1;}
+
+.switch-row{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0;}
+.switch-row .lbl strong{display:block; font-size:13px;}
+.switch-row .lbl span{font-size:11.5px; color:var(--text-faint);}
+.switch{position:relative; width:42px; height:24px; flex:none;}
+.switch input{opacity:0; width:0; height:0;}
+.switch .track{position:absolute; inset:0; background:var(--border); border-radius:999px; transition:background .15s;}
+.switch .track::after{content:""; position:absolute; width:18px; height:18px; left:3px; top:3px; background:var(--bg-elev); border-radius:50%; transition:transform .15s;}
+.switch input:checked + .track{background:var(--accent2);}
+.switch input:checked + .track::after{transform:translateX(18px);}
+
+.profile-card{border:1px solid var(--border-soft); border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:10px; background:var(--panel);}
+.profile-card.active{border-color:var(--accent2);}
+.pc-top{display:flex; align-items:center; gap:8px;}
+.pc-top .pc-name{font-weight:700; font-size:13.5px; flex:1;}
+.pc-type{font-family:var(--font-mono); font-size:10px; color:var(--text-dim); background:var(--panel-2); padding:3px 7px; border-radius:6px;}
+.pc-meta{font-size:11.5px; color:var(--text-faint); margin-top:6px; font-family:var(--font-mono); word-break:break-all;}
+.pc-actions{display:flex; gap:6px; margin-top:10px;}
+
+.divider{height:1px; background:var(--border-soft); margin:22px 0;}
+.add-profile-box{border:1px dashed var(--border); border-radius:var(--radius-md); padding:16px;}
+.add-profile-box h4{margin:0 0 12px; font-size:13.5px;}
+.model-fetch-row{display:flex; gap:8px; align-items:flex-end;}
+.model-fetch-row .field{flex:1; margin-bottom:0;}
+.security-note{display:flex; gap:8px; padding:10px 12px; background:var(--accent-soft); border-radius:9px; font-size:11.5px; color:var(--text-dim); line-height:1.4; margin-top:10px;}
+.security-note svg{width:16px; height:16px; flex:none; color:var(--accent); margin-top:1px;}
+
+/* ============================= TOASTS ============================= */
+#toastContainer{position:fixed; bottom:20px; right:20px; z-index:60; display:flex; flex-direction:column; gap:8px; max-width:320px;}
+.toast{
+  background:var(--bg-elev); border:1px solid var(--border); border-left:3px solid var(--accent2); border-radius:9px;
+  padding:11px 14px; font-size:12.5px; box-shadow:var(--shadow); animation:toastin .2s ease;
+}
+.toast.error{border-left-color:var(--danger);}
+.toast.success{border-left-color:var(--success);}
+@keyframes toastin{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;}}
+
+::-webkit-scrollbar{width:10px; height:10px;}
+::-webkit-scrollbar-thumb{background:var(--border); border-radius:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+
+@media (max-width:640px){
+  .panel{padding:18px;}
+  table.tt, table.tt thead, table.tt tbody, tr.entry-row td{display:block; width:100% !important;}
+  tr.entry-row{display:block; margin-bottom:2px;}
+  tr.entry-row td:first-child, tr.entry-row td:last-child{border-radius:8px; border:1px solid var(--border-soft); margin-bottom:6px;}
+  table.tt thead{display:none;}
+  .steps{padding:12px 14px 0; gap:4px;}
+  .step{padding:8px 10px; font-size:11.5px;}
+  .topbar{padding:12px 14px;}
+  main{padding:0 14px 40px;}
+  .ruler{margin:0 14px;}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="2" y="2" width="60" height="60" rx="16" fill="#101626"/>
+      <path d="M13 18h30a6 6 0 0 1 6 6v13a6 6 0 0 1-6 6H26l-8 7v-7h-5a6 6 0 0 1-6-6V24a6 6 0 0 1 6-6z" fill="#FFD166"/>
+      <rect x="19" y="27" width="17" height="4" rx="2" fill="#101626"/>
+      <rect x="19" y="35" width="24" height="4" rx="2" fill="#101626"/>
+      <path d="M46 14 l5 5 -5 5" stroke="#3FD0C9" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M51 19 h-13" stroke="#3FD0C9" stroke-width="3" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div class="wordmark">Neo<b>Sub</b>Translator</div>
+  </div>
+  <div class="topbar-actions">
+    <button class="icon-btn" id="langToggleBtn" data-i18n-title="lang_toggle" data-i18n-aria="lang_toggle" style="width:auto; padding:0 10px; font-family:var(--font-mono); font-weight:700; font-size:12px;" title="Switch language" aria-label="Switch language">فا</button>
+    <button class="icon-btn" id="themeToggle" data-i18n-title="theme_toggle" data-i18n-aria="theme_toggle" title="Toggle theme" aria-label="Toggle theme"></button>
+    <button class="icon-btn" id="settingsBtn" data-i18n-title="settings_open" data-i18n-aria="settings_open" title="Settings" aria-label="Open settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<nav class="steps" id="stepsNav">
+  <button class="step active" data-step="files"><span data-i18n="step_files">01 · Files</span><span class="badge-count" id="badgeFiles" style="display:none;"></span></button>
+  <button class="step" data-step="translate"><span data-i18n="step_translate">02 · Translate</span><span class="badge-count" id="badgeTranslate" style="display:none;"></span></button>
+  <button class="step" data-step="download"><span data-i18n="step_download">03 · Download</span></button>
+</nav>
+<div class="ruler"></div>
+
+<main>
+  <!-- ===================== PANEL: FILES ===================== -->
+  <section class="panel active" id="panel-files">
+    <div class="section-head">
+      <div><span class="eyebrow" data-i18n="step_01_eyebrow">Step 01</span><h2 data-i18n="files_title">Select subtitles</h2><p data-i18n="files_subtitle">Add one or more subtitle files. Supported: .srt, .vtt, .ass, .ssa, .txt</p></div>
+    </div>
+
+    <label class="dropzone" id="dropzone" for="fileInput">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 16V4M12 4l-4 4M12 4l4 4"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
+      <div class="dz-title" data-i18n="dropzone_title">Drop subtitle files here, or click to browse</div>
+      <div class="dz-sub" data-i18n="dropzone_sub">You can select multiple files at once</div>
+      <input type="file" id="fileInput" multiple accept=".srt,.vtt,.ass,.ssa,.txt,.text">
+    </label>
+
+    <div class="chunk-row">
+      <label for="linesPerBlockInput" data-i18n="lines_per_block">Lines per block</label>
+      <input type="number" id="linesPerBlockInput" min="1" value="30">
+      <span class="hint" data-i18n="lines_per_block_hint">e.g. 30 splits a 90-line file into 3 blocks of 30</span>
+      <button class="btn" id="applyChunkBtn" data-i18n="apply_to_all">Apply to all files</button>
+    </div>
+
+    <ul class="file-list" id="fileList"></ul>
+
+    <div class="files-footer">
+      <button class="btn btn-danger btn-ghost" id="clearAllBtn" data-i18n="clear_all">Clear all</button>
+      <button class="btn btn-primary" id="goToTranslateBtn" data-i18n="continue_translate" disabled>Continue to Translate →</button>
+    </div>
+  </section>
+
+  <!-- ===================== PANEL: TRANSLATE ===================== -->
+  <section class="panel" id="panel-translate">
+    <div class="section-head">
+      <div><span class="eyebrow" data-i18n="step_02_eyebrow">Step 02</span><h2 data-i18n="translate_title">Translate</h2><p data-i18n="translate_subtitle">Review, edit, and translate block by block.</p></div>
+    </div>
+
+    <div id="translateEmpty" class="empty-state" data-i18n="translate_empty">Add subtitle files in Step 01 to get started.</div>
+
+    <div id="translateContent" style="display:none;">
+      <div class="nav-row">
+        <button class="icon-btn rtl-flip" id="prevFileBtn" data-i18n-title="prev_file" data-i18n-aria="prev_file" title="Previous file" aria-label="Previous file">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <select id="fileSelect"></select>
+        <button class="icon-btn rtl-flip" id="nextFileBtn" data-i18n-title="next_file" data-i18n-aria="next_file" title="Next file" aria-label="Next file">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      </div>
+
+      <div class="actions-row">
+        <button class="btn btn-primary" id="translateFileBtn" data-i18n="translate_this_file">Translate this file</button>
+        <button class="btn btn-accent2" id="translateAllBtn" data-i18n="translate_all_files">Translate all files</button>
+        <button class="btn" id="pauseBtn" data-i18n="pause" style="display:none;">Pause</button>
+        <button class="btn" id="resumeBtn" data-i18n="resume" style="display:none;">Resume</button>
+        <div class="spacer"></div>
+        <span class="status-pill" id="statusPill"><span class="dot"></span><span id="statusPillText" data-i18n="status_idle">Idle</span></span>
+      </div>
+
+      <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-label" id="progressLabel">0 / 0</div>
+
+      <table class="tt">
+        <thead><tr><th data-i18n="col_original">Original</th><th data-i18n="col_translated">Translated</th></tr></thead>
+        <tbody id="translateBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== PANEL: DOWNLOAD ===================== -->
+  <section class="panel" id="panel-download">
+    <div class="section-head">
+      <div><span class="eyebrow" data-i18n="step_03_eyebrow">Step 03</span><h2 data-i18n="download_title">Download</h2><p data-i18n="download_subtitle">Export your translated subtitles.</p></div>
+    </div>
+    <div id="downloadEmpty" class="empty-state" data-i18n="download_empty">Add subtitle files in Step 01 to get started.</div>
+    <ul class="dl-list" id="dlList"></ul>
+    <div class="dl-zip-row" id="dlZipRow" style="display:none;">
+      <div class="txt"><strong data-i18n="zip_title">Download everything</strong><span data-i18n="zip_desc">Bundle all translated files into a single ZIP archive.</span></div>
+      <button class="btn btn-primary" id="downloadZipBtn" data-i18n="zip_button">Download all (.zip)</button>
+    </div>
+  </section>
+</main>
+
+<div id="drawerOverlay"></div>
+<aside class="drawer" id="settingsDrawer" aria-label="Settings">
+  <div class="drawer-header">
+    <h3 data-i18n="settings_title">Settings</h3>
+    <span class="saved-tag" id="savedTag" data-i18n="saved_tag">Saved ✓</span>
+    <button class="icon-btn" id="closeSettingsBtn" data-i18n-aria="close_settings" aria-label="Close settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="drawer-tabs">
+    <button class="active" data-tab="profiles" data-i18n="tab_endpoints">Endpoints</button>
+    <button data-tab="prefs" data-i18n="tab_prefs">Preferences</button>
+  </div>
+  <div class="drawer-body">
+    <div class="dtab active" id="tab-profiles">
+      <div id="profileList"></div>
+      <div class="divider"></div>
+      <div class="add-profile-box">
+        <h4 id="profileFormTitle" data-i18n="add_endpoint">Add an endpoint</h4>
+        <div class="field">
+          <label data-i18n="field_name">Name</label>
+          <input type="text" id="pfName" data-i18n-placeholder="name_placeholder" placeholder="e.g. My Gemini Key">
+        </div>
+        <div class="field">
+          <label data-i18n="field_provider">Provider</label>
+          <select id="pfType">
+            <option value="gemini">Google AI Studio (Gemini)</option>
+            <option value="openai">OpenAI</option>
+            <option value="custom-openai" data-i18n="provider_custom">Custom — OpenAI-compatible</option>
+          </select>
+          <div class="desc" id="pfProviderNote"></div>
+        </div>
+        <div class="field" id="pfEndpointField">
+          <label data-i18n="field_endpoint_url">Endpoint URL</label>
+          <input type="text" id="pfEndpoint" placeholder="https://your-proxy.example.com/v1">
+          <div class="desc" data-i18n-html="endpoint_url_desc">The base URL of your OpenAI-compatible endpoint (no trailing <code>/chat/completions</code>).</div>
+        </div>
+        <div class="field" id="pfEndpointFixed" style="display:none;">
+          <label data-i18n="field_endpoint_url">Endpoint URL</label>
+          <div class="pc-meta" id="pfEndpointFixedText" style="padding:10px 12px; border:1px solid var(--border); border-radius:9px; background:var(--panel-2);"></div>
+        </div>
+        <div class="field">
+          <label data-i18n="field_api_key">API key</label>
+          <input type="password" id="pfApiKey" placeholder="sk-...">
+        </div>
+        <div class="model-fetch-row">
+          <div class="field">
+            <label data-i18n="field_model">Model</label>
+            <select id="pfModel"><option value="" data-i18n="fetch_models_first">Fetch models first…</option></select>
+          </div>
+          <button class="btn btn-sm" id="fetchModelsBtn" data-i18n="fetch_models">Fetch models</button>
+        </div>
+        <div class="security-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-4z"/></svg>
+          <span data-i18n="security_note">Your API key is encrypted (AES-256-GCM) with a non-extractable key stored in your browser before it's saved to disk. It never leaves your device except to call your chosen endpoint directly.</span>
+        </div>
+        <div class="pc-actions" style="margin-top:14px;">
+          <button class="btn btn-primary btn-sm" id="saveProfileBtn" data-i18n="save_endpoint">Save endpoint</button>
+          <button class="btn btn-ghost btn-sm" id="cancelEditProfileBtn" data-i18n="cancel_edit" style="display:none;">Cancel edit</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="dtab" id="tab-prefs">
+      <div class="field">
+        <label for="targetLanguage" data-i18n="field_target_language">Target language</label>
+        <input type="text" id="targetLanguage" list="langList" data-i18n-placeholder="target_language_placeholder" placeholder="e.g. Spanish, French, Japanese…">
+        <datalist id="langList">
+          <option value="English"><option value="Spanish"><option value="French"><option value="German">
+          <option value="Italian"><option value="Portuguese"><option value="Japanese"><option value="Korean">
+          <option value="Chinese (Simplified)"><option value="Arabic"><option value="Russian"><option value="Hindi">
+          <option value="Turkish"><option value="Persian"><option value="Vietnamese"><option value="Polish">
+          <option value="Urdu"><option value="Hebrew">
+        </datalist>
+      </div>
+      <div class="field">
+        <label for="toneSelect" data-i18n="field_tone">Tone</label>
+        <select id="toneSelect">
+          <option value="Neutral" data-i18n="tone_neutral">Neutral</option>
+          <option value="Formal" data-i18n="tone_formal">Formal</option>
+          <option value="Casual" data-i18n="tone_casual">Casual</option>
+          <option value="Playful" data-i18n="tone_playful">Playful</option>
+          <option value="Dramatic" data-i18n="tone_dramatic">Dramatic</option>
+          <option value="Literal" data-i18n="tone_literal">Literal / word-for-word</option>
+          <option value="Poetic" data-i18n="tone_poetic">Poetic</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="cooldownInput" data-i18n="field_cooldown">Cooldown between blocks (seconds)</label>
+        <input type="number" id="cooldownInput" min="0" step="0.5" value="1">
+      </div>
+      <div class="field">
+        <label for="extraInstructions" data-i18n="field_extra_instructions">Additional instructions</label>
+        <textarea id="extraInstructions" data-i18n-placeholder="extra_instructions_placeholder" placeholder="Any custom guidance for the translator, e.g. preferred glossary, honorifics, character names…"></textarea>
+      </div>
+      <div class="switch-row">
+        <div class="lbl"><strong data-i18n="explicit_title">Explicit translation</strong><span data-i18n="explicit_desc">Translate mature or profane content faithfully, uncensored.</span></div>
+        <label class="switch"><input type="checkbox" id="explicitToggle"><span class="track"></span></label>
+      </div>
+      <div class="divider"></div>
+      <div class="switch-row">
+        <div class="lbl"><strong data-i18n="cache_title">Translation cache</strong><span data-i18n="cache_desc">Re-importing a file you've translated before resumes automatically. Clearing wipes all cached progress for every file.</span></div>
+        <button class="btn btn-sm btn-danger" id="clearCacheBtn" data-i18n="clear_cache">Clear cache</button>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<div id="toastContainer" aria-live="polite"></div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const STORAGE_KEY = 'neosub_state_v1';
+let uidCounter = 1;
+function uid(){ return 'id' + (uidCounter++) + '_' + Math.random().toString(36).slice(2,8); }
+
+const state = {
+  theme: 'dark',
+  uiLang: 'en',
+  linesPerBlock: 30,
+  files: [],           // {id,name,format,entries[],blocks[],raw,assLines?}
+  currentFileId: null,
+  activeStep: 'files',
+  profiles: [],         // {id,name,type,endpoint,model,apiKeyEnc}
+  activeProfileId: null,
+  settings: {
+    targetLanguage: 'Spanish',
+    tone: 'Neutral',
+    cooldownSec: 1,
+    extraInstructions: '',
+    explicit: false
+  }
+};
+const apiKeyPlain = {}; // profileId -> decrypted key, in-memory only
+
+const TR = { running:false, paused:false, cancel:false };
+
+/* ============================================================
+   I18N
+   ============================================================ */
+const I18N = {
+en:{
+  theme_toggle:'Toggle theme', settings_open:'Open settings', lang_toggle:'Switch language',
+  step_files:'01 · Files', step_translate:'02 · Translate', step_download:'03 · Download',
+  step_01_eyebrow:'Step 01', step_02_eyebrow:'Step 02', step_03_eyebrow:'Step 03',
+  files_title:'Select subtitles', files_subtitle:'Add one or more subtitle files. Supported: .srt, .vtt, .ass, .ssa, .txt',
+  dropzone_title:'Drop subtitle files here, or click to browse', dropzone_sub:'You can select multiple files at once',
+  lines_per_block:'Lines per block', lines_per_block_hint:'e.g. 30 splits a 90-line file into 3 blocks of 30',
+  apply_to_all:'Apply to all files', clear_all:'Clear all', continue_translate:'Continue to Translate →',
+  translate_title:'Translate', translate_subtitle:'Review, edit, and translate block by block.',
+  translate_empty:'Add subtitle files in Step 01 to get started.',
+  prev_file:'Previous file', next_file:'Next file',
+  translate_this_file:'Translate this file', translate_all_files:'Translate all files',
+  pause:'Pause', resume:'Resume',
+  status_idle:'Idle', status_translating:'Translating…', status_paused:'Paused',
+  col_original:'Original', col_translated:'Translated',
+  download_title:'Download', download_subtitle:'Export your translated subtitles.',
+  download_empty:'Add subtitle files in Step 01 to get started.',
+  zip_title:'Download everything', zip_desc:'Bundle all translated files into a single ZIP archive.', zip_button:'Download all (.zip)',
+  settings_title:'Settings', saved_tag:'Saved ✓', close_settings:'Close settings',
+  tab_endpoints:'Endpoints', tab_prefs:'Preferences',
+  add_endpoint:'Add an endpoint', edit_endpoint:'Edit endpoint',
+  field_name:'Name', name_placeholder:'e.g. My Gemini Key',
+  field_provider:'Provider', provider_custom:'Custom — OpenAI-compatible',
+  field_endpoint_url:'Endpoint URL', endpoint_url_desc:'The base URL of your OpenAI-compatible endpoint (no trailing <code>/chat/completions</code>).',
+  field_api_key:'API key', field_model:'Model',
+  fetch_models_first:'Fetch models first…', fetch_models:'Fetch models', fetching_ellipsis:'Fetching…',
+  security_note:'Your API key is encrypted (AES-256-GCM) with a non-extractable key stored in your browser before it\u2019s saved to disk. It never leaves your device except to call your chosen endpoint directly.',
+  save_endpoint:'Save endpoint', cancel_edit:'Cancel edit',
+  field_target_language:'Target language', target_language_placeholder:'e.g. Spanish, French, Japanese…',
+  field_tone:'Tone', tone_neutral:'Neutral', tone_formal:'Formal', tone_casual:'Casual', tone_playful:'Playful',
+  tone_dramatic:'Dramatic', tone_literal:'Literal / word-for-word', tone_poetic:'Poetic',
+  field_cooldown:'Cooldown between blocks (seconds)',
+  field_extra_instructions:'Additional instructions', extra_instructions_placeholder:'Any custom guidance for the translator, e.g. preferred glossary, honorifics, character names…',
+  explicit_title:'Explicit translation', explicit_desc:'Translate mature or profane content faithfully, uncensored.',
+  cache_title:'Translation cache', cache_desc:'Re-importing a file you\u2019ve translated before resumes automatically. Clearing wipes all cached progress for every file.',
+  clear_cache:'Clear cache',
+  files_empty:'No files added yet.', file_meta:'{lines} lines · {blocks} blocks', remove_file_aria:'Remove {name}',
+  block_status_pending:'Pending', block_status_translating:'Translating…', block_status_done:'Done', block_status_error:'Error',
+  block_label:'Block {n} · {range}', retranslate:'Retranslate', entry_translated_placeholder:'Not translated yet…',
+  progress_label:'{done} / {total} lines translated', file_select_option:'{name} ({done}/{total})',
+  dl_meta:'{done}/{total} translated', download_button:'Download',
+  no_endpoints:'No endpoints saved yet.', no_model_selected:'no model selected',
+  profile_active:'Active', profile_use:'Use', profile_edit:'Edit', profile_delete:'Delete',
+  confirm_delete_endpoint:'Delete this endpoint?', confirm_clear_files:'Remove all loaded files?',
+  confirm_clear_cache:'Clear all cached translation progress? Files currently open in the app are not affected until you reload them.',
+  toast_no_lines_found:'No subtitle lines found in {name}', toast_failed_read:'Failed to read {name}: {msg}',
+  toast_loaded_file:'Loaded {name} — {count} lines', toast_loaded_file_cached:'Loaded {name} — {count} lines (resumed {restored} from cache)',
+  toast_applied_chunk:'Applied new block size to all files',
+  toast_zip_lib_failed:'ZIP library failed to load — check your connection.', toast_zip_downloaded:'ZIP downloaded',
+  toast_no_active_endpoint:'No active endpoint. Open Settings to add one.',
+  toast_no_model_selected:'Select a model for your endpoint in Settings.',
+  toast_no_api_key:'No API key found for the active endpoint.',
+  toast_block_failed:'Block failed: {msg}',
+  toast_enter_endpoint_url:'Enter an endpoint URL.', toast_endpoint_saved:'Endpoint saved',
+  toast_enter_endpoint_url_first:'Enter an endpoint URL first.', toast_enter_api_key_first:'Enter an API key first.',
+  toast_no_models_returned:'No models returned by this endpoint.', toast_loaded_models:'Loaded {count} models',
+  toast_failed_fetch_models:'Failed to fetch models: {msg}',
+  toast_cache_cleared:'Translation cache cleared', toast_failed_clear_cache:'Failed to clear cache: {msg}',
+  untitled_endpoint:'Untitled endpoint', leave_blank_key:'Leave blank to keep existing key',
+  provider_note_gemini:'Uses Google\u2019s official Generative Language API. Endpoint is fixed.',
+  provider_note_openai:'Uses OpenAI\u2019s official API. Endpoint is fixed. Note: OpenAI does not consistently allow direct browser requests (CORS) \u2014 if fetching models or translating fails immediately, point a Custom endpoint at a CORS-enabled OpenAI-compatible proxy instead.',
+  provider_note_custom:'Any OpenAI-compatible endpoint (self-hosted, gateway, or proxy). It must respond to CORS preflight requests from a browser origin.',
+  err_cors_openai:'Network/CORS error \u2014 OpenAI\u2019s official API does not consistently allow direct requests from a browser page. Try a Custom endpoint pointed at a CORS-enabled OpenAI-compatible proxy.',
+  err_cors_local:'Network/CORS error \u2014 "{host}" is a local server. This is usually Chrome\u2019s Private Network Access check: browsers require a local server\u2019s preflight response to include "Access-Control-Allow-Private-Network: true", which most self-hosted routers/proxies (including tools like 9router) don\u2019t send. Run a small local proxy in front of it that adds this header, or check the tool\u2019s settings for a CORS/browser-access option.',
+  err_cors_generic:'Network/CORS error \u2014 this endpoint may not allow direct requests from a browser page, or the URL/network connection is unreachable.',
+  err_response_not_json:'Response was not valid JSON: {text}', err_empty_response:'Empty response from model',
+  err_translations_missing:'Response did not contain a "translations" array',
+  err_model_count_mismatch:'Model returned {got} line(s), expected {expected}'
+},
+fa:{
+  theme_toggle:'تغییر تم', settings_open:'باز کردن تنظیمات', lang_toggle:'تغییر زبان',
+  step_files:'01 · فایل‌ها', step_translate:'02 · ترجمه', step_download:'03 · دانلود',
+  step_01_eyebrow:'مرحله 01', step_02_eyebrow:'مرحله 02', step_03_eyebrow:'مرحله 03',
+  files_title:'انتخاب زیرنویس‌ها', files_subtitle:'یک یا چند فایل زیرنویس اضافه کنید. فرمت‌های پشتیبانی‌شده: .srt، .vtt، .ass، .ssa، .txt',
+  dropzone_title:'فایل‌های زیرنویس را اینجا رها کنید یا برای انتخاب کلیک کنید', dropzone_sub:'می‌توانید چند فایل را همزمان انتخاب کنید',
+  lines_per_block:'تعداد خط در هر بلوک', lines_per_block_hint:'مثلاً عدد 30 یک فایل 90 خطی را به 3 بلوک 30 خطی تقسیم می‌کند',
+  apply_to_all:'اعمال به همه فایل‌ها', clear_all:'پاک کردن همه', continue_translate:'ادامه به مرحله ترجمه',
+  translate_title:'ترجمه', translate_subtitle:'بررسی، ویرایش و ترجمه بلوک‌به‌بلوک.',
+  translate_empty:'برای شروع، در مرحله 01 فایل زیرنویس اضافه کنید.',
+  prev_file:'فایل قبلی', next_file:'فایل بعدی',
+  translate_this_file:'ترجمه این فایل', translate_all_files:'ترجمه همه فایل‌ها',
+  pause:'توقف موقت', resume:'ادامه',
+  status_idle:'آماده', status_translating:'در حال ترجمه…', status_paused:'متوقف‌شده',
+  col_original:'متن اصلی', col_translated:'ترجمه‌شده',
+  download_title:'دانلود', download_subtitle:'زیرنویس‌های ترجمه‌شده خود را دریافت کنید.',
+  download_empty:'برای شروع، در مرحله 01 فایل زیرنویس اضافه کنید.',
+  zip_title:'دانلود همه فایل‌ها', zip_desc:'همه فایل‌های ترجمه‌شده را در یک بایگانی ZIP فشرده کنید.', zip_button:'دانلود همه (.zip)',
+  settings_title:'تنظیمات', saved_tag:'ذخیره شد ✓', close_settings:'بستن تنظیمات',
+  tab_endpoints:'اتصال‌ها', tab_prefs:'ترجیحات',
+  add_endpoint:'افزودن یک اتصال', edit_endpoint:'ویرایش اتصال',
+  field_name:'نام', name_placeholder:'مثلاً کلید Gemini من',
+  field_provider:'ارائه‌دهنده', provider_custom:'سفارشی — سازگار با OpenAI',
+  field_endpoint_url:'آدرس اتصال (Endpoint)', endpoint_url_desc:'آدرس پایه اتصال سازگار با OpenAI شما (بدون <code>/chat/completions</code> در انتها).',
+  field_api_key:'کلید API', field_model:'مدل',
+  fetch_models_first:'ابتدا مدل‌ها را دریافت کنید…', fetch_models:'دریافت مدل‌ها', fetching_ellipsis:'در حال دریافت…',
+  security_note:'کلید API شما با الگوریتم AES-256-GCM و کلیدی غیرقابل‌استخراج که در مرورگرتان ذخیره می‌شود رمزگذاری می‌شود. این کلید هرگز از دستگاه شما خارج نمی‌شود، مگر برای تماس مستقیم با اتصالی که انتخاب کرده‌اید.',
+  save_endpoint:'ذخیره اتصال', cancel_edit:'لغو ویرایش',
+  field_target_language:'زبان مقصد', target_language_placeholder:'مثلاً اسپانیایی، فرانسوی، ژاپنی…',
+  field_tone:'لحن', tone_neutral:'خنثی', tone_formal:'رسمی', tone_casual:'محاوره‌ای', tone_playful:'شوخ‌طبعانه',
+  tone_dramatic:'دراماتیک', tone_literal:'تحت‌اللفظی / کلمه‌به‌کلمه', tone_poetic:'شاعرانه',
+  field_cooldown:'فاصله زمانی بین بلوک‌ها (ثانیه)',
+  field_extra_instructions:'دستورالعمل‌های تکمیلی', extra_instructions_placeholder:'هر راهنمایی سفارشی برای مترجم، مثلاً واژه‌نامه ترجیحی، القاب، نام شخصیت‌ها…',
+  explicit_title:'ترجمه بدون سانسور', explicit_desc:'محتوای بزرگسال یا نامناسب را دقیق و بدون سانسور ترجمه کن.',
+  cache_title:'کش ترجمه', cache_desc:'با وارد کردن دوباره فایلی که قبلاً ترجمه کرده‌اید، ترجمه به‌طور خودکار از همان‌جا ادامه می‌یابد. پاک کردن کش، پیشرفت ذخیره‌شده همه فایل‌ها را حذف می‌کند.',
+  clear_cache:'پاک کردن کش',
+  files_empty:'هنوز فایلی اضافه نشده است.', file_meta:'{lines} خط · {blocks} بلوک', remove_file_aria:'حذف {name}',
+  block_status_pending:'در انتظار', block_status_translating:'در حال ترجمه…', block_status_done:'انجام‌شد', block_status_error:'خطا',
+  block_label:'بلوک {n} · {range}', retranslate:'ترجمه مجدد', entry_translated_placeholder:'هنوز ترجمه نشده…',
+  progress_label:'{done} / {total} خط ترجمه شد', file_select_option:'{name} ({done}/{total})',
+  dl_meta:'{done}/{total} ترجمه‌شده', download_button:'دانلود',
+  no_endpoints:'هنوز هیچ اتصالی ذخیره نشده است.', no_model_selected:'مدلی انتخاب نشده',
+  profile_active:'فعال', profile_use:'استفاده', profile_edit:'ویرایش', profile_delete:'حذف',
+  confirm_delete_endpoint:'این اتصال حذف شود؟', confirm_clear_files:'همه فایل‌های بارگذاری‌شده حذف شوند؟',
+  confirm_clear_cache:'همه پیشرفت‌های ذخیره‌شده در کش پاک شوند؟ فایل‌های باز فعلی تا زمانی که دوباره بارگذاری نشوند تغییری نمی‌کنند.',
+  toast_no_lines_found:'هیچ خط زیرنویسی در {name} یافت نشد', toast_failed_read:'خواندن {name} ناموفق بود: {msg}',
+  toast_loaded_file:'{name} بارگذاری شد — {count} خط', toast_loaded_file_cached:'{name} بارگذاری شد — {count} خط (بازیابی {restored} خط از کش)',
+  toast_applied_chunk:'اندازه بلوک جدید برای همه فایل‌ها اعمال شد',
+  toast_zip_lib_failed:'بارگذاری کتابخانه ZIP ناموفق بود — اتصال اینترنت خود را بررسی کنید.', toast_zip_downloaded:'فایل ZIP دانلود شد',
+  toast_no_active_endpoint:'هیچ اتصال فعالی وجود ندارد. برای افزودن، تنظیمات را باز کنید.',
+  toast_no_model_selected:'در تنظیمات، یک مدل برای اتصال خود انتخاب کنید.',
+  toast_no_api_key:'کلید API برای اتصال فعال یافت نشد.',
+  toast_block_failed:'بلوک با خطا مواجه شد: {msg}',
+  toast_enter_endpoint_url:'آدرس اتصال را وارد کنید.', toast_endpoint_saved:'اتصال ذخیره شد',
+  toast_enter_endpoint_url_first:'ابتدا آدرس اتصال را وارد کنید.', toast_enter_api_key_first:'ابتدا کلید API را وارد کنید.',
+  toast_no_models_returned:'این اتصال هیچ مدلی برنگرداند.', toast_loaded_models:'{count} مدل بارگذاری شد',
+  toast_failed_fetch_models:'دریافت مدل‌ها ناموفق بود: {msg}',
+  toast_cache_cleared:'کش ترجمه پاک شد', toast_failed_clear_cache:'پاک کردن کش ناموفق بود: {msg}',
+  untitled_endpoint:'اتصال بدون‌نام', leave_blank_key:'برای نگه‌داشتن کلید فعلی، خالی بگذارید',
+  provider_note_gemini:'از API رسمی Generative Language گوگل استفاده می‌کند. آدرس اتصال ثابت است.',
+  provider_note_openai:'از API رسمی OpenAI استفاده می‌کند. آدرس اتصال ثابت است. توجه: OpenAI همیشه اجازه درخواست مستقیم از مرورگر (CORS) را نمی‌دهد — اگر دریافت مدل‌ها یا ترجمه بلافاصله با خطا مواجه شد، به‌جای آن یک اتصال «سفارشی» به یک پراکسی سازگار با OpenAI که از CORS پشتیبانی می‌کند تنظیم کنید.',
+  provider_note_custom:'هر اتصال سازگار با OpenAI (میزبانی شخصی، گیت‌وی یا پراکسی). این اتصال باید به درخواست‌های پیش‌بررسی (preflight) CORS از مرورگر پاسخ دهد.',
+  err_cors_openai:'خطای شبکه/CORS — API رسمی OpenAI همیشه اجازه درخواست مستقیم از یک صفحه مرورگر را نمی‌دهد. یک اتصال «سفارشی» را به‌سمت یک پراکسی سازگار با OpenAI که از CORS پشتیبانی می‌کند تنظیم کنید.',
+  err_cors_local:'خطای شبکه/CORS — «{host}» یک سرور محلی است. این معمولاً به بررسی Private Network Access مرورگر کروم مربوط می‌شود: مرورگرها انتظار دارند پاسخ preflight سرور محلی هدر «Access-Control-Allow-Private-Network: true» را داشته باشد، که بیشتر روتر/پراکسی‌های شخصی (از جمله ابزارهایی مثل 9router) آن را ارسال نمی‌کنند. یک پراکسی محلی کوچک جلوی آن اجرا کنید که این هدر را اضافه کند، یا تنظیمات ابزار را برای گزینه دسترسی مرورگر/CORS بررسی کنید.',
+  err_cors_generic:'خطای شبکه/CORS — این اتصال ممکن است اجازه درخواست مستقیم از یک صفحه مرورگر را ندهد، یا آدرس/اتصال شبکه در دسترس نیست.',
+  err_response_not_json:'پاسخ، JSON معتبر نبود: {text}', err_empty_response:'پاسخ خالی از مدل دریافت شد',
+  err_translations_missing:'پاسخ شامل آرایه «translations» نبود',
+  err_model_count_mismatch:'مدل {got} خط برگرداند، در حالی که {expected} خط مورد انتظار بود'
+}
+};
+function t(key, vars){
+  let s = (I18N[state.uiLang] && I18N[state.uiLang][key]) || I18N.en[key] || key;
+  if(vars) Object.keys(vars).forEach(k=>{ s = s.split('{'+k+'}').join(vars[k]); });
+  return s;
+}
+function applyStaticTranslations(){
+  $all('[data-i18n]').forEach(el=>{ el.textContent = t(el.dataset.i18n); });
+  $all('[data-i18n-html]').forEach(el=>{ el.innerHTML = t(el.dataset.i18nHtml); });
+  $all('[data-i18n-placeholder]').forEach(el=>{ el.placeholder = t(el.dataset.i18nPlaceholder); });
+  $all('[data-i18n-title]').forEach(el=>{ el.title = t(el.dataset.i18nTitle); });
+  $all('[data-i18n-aria]').forEach(el=>{ el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+}
+function applyLanguage(){
+  document.documentElement.lang = state.uiLang;
+  document.documentElement.dir = state.uiLang==='fa' ? 'rtl' : 'ltr';
+  const btn = $('#langToggleBtn');
+  if(btn) btn.textContent = state.uiLang==='fa' ? 'EN' : 'فا';
+  applyStaticTranslations();
+}
+function toggleLanguage(){
+  state.uiLang = state.uiLang==='fa' ? 'en' : 'fa';
+  applyLanguage();
+  updateProfileFormForType();
+  renderFilesPanel(); renderTranslatePanel(); renderDownloadPanel(); renderProfileList();
+  saveSettings();
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function $(sel, root){ return (root||document).querySelector(sel); }
+function $all(sel, root){ return Array.from((root||document).querySelectorAll(sel)); }
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function toast(msg, type){
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' '+type : '');
+  el.textContent = msg;
+  $('#toastContainer').appendChild(el);
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transition='opacity .3s'; setTimeout(()=>el.remove(),300); }, 3800);
+}
+
+function b64FromBytes(bytes){
+  let bin=''; for(let i=0;i<bytes.length;i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+function bytesFromB64(b64){
+  const bin = atob(b64); const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return bytes;
+}
+
+/* ============================================================
+   ENCRYPTED KEY STORAGE (IndexedDB CryptoKey + AES-GCM)
+   ============================================================ */
+const CryptoStore = {
+  _db:null,
+  openDB(){
+    if(this._db) return Promise.resolve(this._db);
+    return new Promise((resolve,reject)=>{
+      const req = indexedDB.open('neosub_keystore', 1);
+      req.onupgradeneeded = ()=>{ req.result.createObjectStore('keys'); };
+      req.onsuccess = ()=>{ this._db=req.result; resolve(req.result); };
+      req.onerror = ()=>reject(req.error);
+    });
+  },
+  async getKey(){
+    const db = await this.openDB();
+    const existing = await new Promise((resolve,reject)=>{
+      const tx = db.transaction('keys','readonly');
+      const r = tx.objectStore('keys').get('masterKey');
+      r.onsuccess = ()=>resolve(r.result||null);
+      r.onerror = ()=>reject(r.error);
+    });
+    if(existing) return existing;
+    const key = await crypto.subtle.generateKey({name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
+    await new Promise((resolve,reject)=>{
+      const tx = db.transaction('keys','readwrite');
+      tx.objectStore('keys').put(key,'masterKey');
+      tx.oncomplete = resolve; tx.onerror = ()=>reject(tx.error);
+    });
+    return key;
+  },
+  async encrypt(plainText){
+    if(!plainText) return null;
+    const key = await this.getKey();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const enc = new TextEncoder().encode(plainText);
+    const cipher = await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, enc);
+    return { iv: b64FromBytes(iv), data: b64FromBytes(new Uint8Array(cipher)) };
+  },
+  async decrypt(obj){
+    if(!obj || !obj.data) return '';
+    try{
+      const key = await this.getKey();
+      const iv = bytesFromB64(obj.iv);
+      const data = bytesFromB64(obj.data);
+      const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv}, key, data);
+      return new TextDecoder().decode(plain);
+    }catch(e){ console.warn('decrypt failed', e); return ''; }
+  }
+};
+
+/* ============================================================
+   TRANSLATION CACHE (IndexedDB, keyed by file-content fingerprint)
+   Lets a translation-in-progress survive closing the tab: re-importing
+   the same file content resumes from the last completed block instead
+   of starting over.
+   ============================================================ */
+async function computeFingerprint(text){
+  const enc = new TextEncoder().encode(text);
+  const hashBuf = await crypto.subtle.digest('SHA-256', enc);
+  const bytes = new Uint8Array(hashBuf);
+  let hex = '';
+  for(const b of bytes) hex += b.toString(16).padStart(2,'0');
+  return hex;
+}
+function cacheKeyFor(fingerprint, targetLanguage){
+  return fingerprint + '::' + (targetLanguage||'').trim().toLowerCase();
+}
+const CacheStore = {
+  _db:null,
+  openDB(){
+    if(this._db) return Promise.resolve(this._db);
+    return new Promise((resolve,reject)=>{
+      const req = indexedDB.open('neosub_cache', 1);
+      req.onupgradeneeded = ()=>{ req.result.createObjectStore('translations', {keyPath:'cacheKey'}); };
+      req.onsuccess = ()=>{ this._db=req.result; resolve(req.result); };
+      req.onerror = ()=>reject(req.error);
+    });
+  },
+  async put(record){
+    const db = await this.openDB();
+    return new Promise((resolve,reject)=>{
+      const tx = db.transaction('translations','readwrite');
+      tx.objectStore('translations').put(record);
+      tx.oncomplete = ()=>resolve(true);
+      tx.onerror = ()=>reject(tx.error);
+    });
+  },
+  async get(cacheKey){
+    const db = await this.openDB();
+    return new Promise((resolve,reject)=>{
+      const tx = db.transaction('translations','readonly');
+      const r = tx.objectStore('translations').get(cacheKey);
+      r.onsuccess = ()=>resolve(r.result||null);
+      r.onerror = ()=>reject(r.error);
+    });
+  },
+  async clearAll(){
+    const db = await this.openDB();
+    return new Promise((resolve,reject)=>{
+      const tx = db.transaction('translations','readwrite');
+      tx.objectStore('translations').clear();
+      tx.oncomplete = ()=>resolve(true);
+      tx.onerror = ()=>reject(tx.error);
+    });
+  }
+};
+async function saveFileToCache(file){
+  if(!file.fingerprint) return;
+  try{
+    await CacheStore.put({
+      cacheKey: cacheKeyFor(file.fingerprint, state.settings.targetLanguage),
+      fileName: file.name,
+      format: file.format,
+      targetLanguage: state.settings.targetLanguage,
+      translations: file.entries.map(e=>e.translated||''),
+      updatedAt: Date.now()
+    });
+  }catch(e){ console.warn('cache save failed', e); }
+}
+
+/* ============================================================
+   PERSISTENCE (settings, profiles — not the raw subtitle files)
+   ============================================================ */
+function saveSettings(){
+  const payload = {
+    theme: state.theme,
+    uiLang: state.uiLang,
+    linesPerBlock: state.linesPerBlock,
+    profiles: state.profiles,
+    activeProfileId: state.activeProfileId,
+    settings: state.settings
+  };
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); }catch(e){ console.warn(e); }
+  flashSavedTag();
+}
+let savedTagTimer=null;
+function flashSavedTag(){
+  const tag = $('#savedTag'); if(!tag) return;
+  tag.classList.add('show');
+  clearTimeout(savedTagTimer);
+  savedTagTimer = setTimeout(()=>tag.classList.remove('show'), 1400);
+}
+function loadSettings(){
+  let raw;
+  try{ raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }catch(e){ raw = {}; }
+  if(raw.theme) state.theme = raw.theme;
+  if(raw.uiLang) state.uiLang = raw.uiLang;
+  if(raw.linesPerBlock) state.linesPerBlock = raw.linesPerBlock;
+  if(Array.isArray(raw.profiles)) state.profiles = raw.profiles;
+  if(raw.activeProfileId) state.activeProfileId = raw.activeProfileId;
+  if(raw.settings) Object.assign(state.settings, raw.settings);
+}
+
+/* ============================================================
+   SUBTITLE PARSERS
+   ============================================================ */
+function detectFormat(filename){
+  const ext = (filename.split('.').pop()||'').toLowerCase();
+  if(ext==='srt') return 'srt';
+  if(ext==='vtt') return 'vtt';
+  if(ext==='ass'||ext==='ssa') return 'ass';
+  return 'txt';
+}
+
+function normalizeNewlines(text){ return text.replace(/\r\n/g,'\n').replace(/\r/g,'\n'); }
+
+function parseSRT(text){
+  const blocks = normalizeNewlines(text).trim().split(/\n\s*\n/);
+  const entries = [];
+  for(const block of blocks){
+    const lines = block.split('\n');
+    const timingIdx = lines.findIndex(l=>l.includes('-->'));
+    if(timingIdx===-1) continue;
+    const timing = lines[timingIdx].split('-->');
+    if(timing.length<2) continue;
+    const start = timing[0].trim();
+    const end = timing[1].trim().split(' ')[0];
+    const textLines = lines.slice(timingIdx+1);
+    entries.push({ id:uid(), start, end, text: textLines.join('\n').trim(), translated:'' });
+  }
+  return entries;
+}
+
+function parseVTT(text){
+  let body = normalizeNewlines(text).trim();
+  body = body.replace(/^WEBVTT[^\n]*\n?/,'');
+  const blocks = body.split(/\n\s*\n/);
+  const entries = [];
+  for(const block of blocks){
+    const trimmed = block.trim();
+    if(!trimmed) continue;
+    if(/^(NOTE|STYLE|REGION)\b/.test(trimmed)) continue;
+    const lines = trimmed.split('\n');
+    const timingIdx = lines.findIndex(l=>l.includes('-->'));
+    if(timingIdx===-1) continue;
+    const timing = lines[timingIdx].split('-->');
+    const start = timing[0].trim();
+    const end = (timing[1]||'').trim().split(' ')[0];
+    const textLines = lines.slice(timingIdx+1);
+    entries.push({ id:uid(), start, end, text: textLines.join('\n').trim(), translated:'' });
+  }
+  return entries;
+}
+
+function splitAssFields(str, n){
+  const parts = [];
+  let rest = str;
+  for(let i=0;i<n-1;i++){
+    const ci = rest.indexOf(',');
+    if(ci===-1){ parts.push(rest); rest=''; break; }
+    parts.push(rest.slice(0,ci));
+    rest = rest.slice(ci+1);
+  }
+  parts.push(rest);
+  return parts;
+}
+
+function parseASS(text){
+  const lines = normalizeNewlines(text).split('\n');
+  const entries = [];
+  let format = null;
+  let textFieldIdx = -1;
+  for(let i=0;i<lines.length;i++){
+    const line = lines[i];
+    if(/^Format:/i.test(line.trim())){
+      format = line.trim().slice('Format:'.length).split(',').map(s=>s.trim());
+      textFieldIdx = format.indexOf('Text');
+      continue;
+    }
+    if(/^Dialogue:/i.test(line.trim()) && format && textFieldIdx>-1){
+      const body = line.trim().slice('Dialogue:'.length).trim();
+      const fields = splitAssFields(body, format.length);
+      const rawText = fields[textFieldIdx] || '';
+      entries.push({
+        id:uid(), lineIndex:i, fields, textFieldIdx,
+        start:'', end:'',
+        text: rawText.replace(/\\N/gi,'\n'),
+        translated:''
+      });
+    }
+  }
+  return { entries, lines };
+}
+
+function parseTXT(text){
+  const lines = normalizeNewlines(text).split('\n');
+  const entries = [];
+  for(const l of lines){
+    if(l.trim()==='') continue;
+    entries.push({ id:uid(), start:'', end:'', text:l, translated:'' });
+  }
+  return entries;
+}
+
+function chunkEntries(entries, size){
+  size = Math.max(1, parseInt(size)||30);
+  const blocks = [];
+  for(let i=0;i<entries.length;i+=size){
+    const slice = entries.slice(i, i+size);
+    const allDone = slice.length>0 && slice.every(e=>e.translated && e.translated.trim()!=='');
+    blocks.push({ id:uid(), entries:slice, status: allDone?'done':'pending', error:null });
+  }
+  return blocks;
+}
+
+/* ============================================================
+   FILE REBUILDING (export)
+   ============================================================ */
+function textOf(e){ return (e.translated && e.translated.trim()!=='') ? e.translated : e.text; }
+
+function rebuildSRT(file){
+  return file.entries.map((e,i)=>{
+    return `${i+1}\n${e.start} --> ${e.end}\n${textOf(e)}`;
+  }).join('\n\n') + '\n';
+}
+function rebuildVTT(file){
+  const body = file.entries.map(e=> `${e.start} --> ${e.end}\n${textOf(e)}`).join('\n\n');
+  return 'WEBVTT\n\n' + body + '\n';
+}
+function rebuildASS(file){
+  const lines = file.assLines.slice();
+  for(const e of file.entries){
+    const fields = e.fields.slice();
+    fields[e.textFieldIdx] = textOf(e).replace(/\n/g,'\\N');
+    lines[e.lineIndex] = 'Dialogue: ' + fields.join(',');
+  }
+  return lines.join('\n');
+}
+function rebuildTXT(file){
+  return file.entries.map(e=>textOf(e)).join('\n') + '\n';
+}
+function getFileContent(file){
+  switch(file.format){
+    case 'srt': return rebuildSRT(file);
+    case 'vtt': return rebuildVTT(file);
+    case 'ass': return rebuildASS(file);
+    default: return rebuildTXT(file);
+  }
+}
+function exportFilename(file){
+  const base = file.name.replace(/\.[^.]+$/,'');
+  const ext = file.format==='ass' ? (file.originalExt||'ass') : file.format;
+  return `${base}.translated.${ext}`;
+}
+
+/* ============================================================
+   FILE HANDLING
+   ============================================================ */
+async function handleFiles(fileList){
+  const files = Array.from(fileList);
+  for(const f of files){
+    try{
+      const text = await f.text();
+      const format = detectFormat(f.name);
+      let entries, assLines=null;
+      if(format==='srt') entries = parseSRT(text);
+      else if(format==='vtt') entries = parseVTT(text);
+      else if(format==='ass'){ const r = parseASS(text); entries = r.entries; assLines = r.lines; }
+      else entries = parseTXT(text);
+
+      if(!entries.length){ toast(t('toast_no_lines_found', {name:f.name}), 'error'); continue; }
+
+      const fingerprint = await computeFingerprint(text);
+      const file = {
+        id: uid(), name: f.name, format, fingerprint,
+        originalExt: (f.name.split('.').pop()||'').toLowerCase(),
+        entries, assLines,
+        blocks: null
+      };
+
+      let restoredCount = 0;
+      try{
+        const cached = await CacheStore.get(cacheKeyFor(fingerprint, state.settings.targetLanguage));
+        if(cached && Array.isArray(cached.translations)){
+          entries.forEach((e,i)=>{
+            const tr = cached.translations[i];
+            if(typeof tr === 'string' && tr.trim()!==''){ e.translated = tr; restoredCount++; }
+          });
+        }
+      }catch(e){ console.warn('cache lookup failed', e); }
+
+      file.blocks = chunkEntries(entries, state.linesPerBlock);
+      state.files.push(file);
+      if(!state.currentFileId) state.currentFileId = file.id;
+      toast(restoredCount
+        ? t('toast_loaded_file_cached', {name:f.name, count:entries.length, restored:restoredCount})
+        : t('toast_loaded_file', {name:f.name, count:entries.length}), 'success');
+    }catch(err){
+      toast(t('toast_failed_read', {name:f.name, msg:err.message}), 'error');
+    }
+  }
+  renderFilesPanel();
+  renderTranslatePanel();
+  renderDownloadPanel();
+}
+
+function removeFile(id){
+  state.files = state.files.filter(f=>f.id!==id);
+  if(state.currentFileId===id){
+    state.currentFileId = state.files.length ? state.files[0].id : null;
+  }
+  renderFilesPanel(); renderTranslatePanel(); renderDownloadPanel();
+}
+
+function clearAllFiles(){
+  if(!state.files.length) return;
+  if(!confirm(t('confirm_clear_files'))) return;
+  state.files = [];
+  state.currentFileId = null;
+  renderFilesPanel(); renderTranslatePanel(); renderDownloadPanel();
+}
+
+function getFile(id){ return state.files.find(f=>f.id===id); }
+
+/* ============================================================
+   RENDER: FILES PANEL
+   ============================================================ */
+function renderFilesPanel(){
+  const list = $('#fileList');
+  list.innerHTML = '';
+  if(!state.files.length){
+    list.innerHTML = `<div class="empty-state">${esc(t('files_empty'))}</div>`;
+  }
+  for(const f of state.files){
+    const li = document.createElement('li');
+    li.className='file-row';
+    li.innerHTML = `
+      <span class="fmt-badge">${f.format.toUpperCase()}</span>
+      <span class="fname" title="${esc(f.name)}">${esc(f.name)}</span>
+      <span class="fmeta">${esc(t('file_meta', {lines:f.entries.length, blocks:f.blocks.length}))}</span>
+      <button class="rm-btn" aria-label="${esc(t('remove_file_aria', {name:f.name}))}" data-id="${f.id}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>`;
+    li.querySelector('.rm-btn').addEventListener('click', ()=>removeFile(f.id));
+    list.appendChild(li);
+  }
+  $('#goToTranslateBtn').disabled = state.files.length===0;
+  $('#linesPerBlockInput').value = state.linesPerBlock;
+  updateStepBadges();
+}
+
+/* ============================================================
+   RENDER: TRANSLATE PANEL
+   ============================================================ */
+function totalCounts(file){
+  const total = file.entries.length;
+  const done = file.entries.filter(e=>e.translated && e.translated.trim()!=='').length;
+  return {total, done};
+}
+
+function blockStatusLabel(status){
+  return {pending:t('block_status_pending'), translating:t('block_status_translating'), done:t('block_status_done'), error:t('block_status_error')}[status] || status;
+}
+
+function renderTranslatePanel(){
+  const empty = $('#translateEmpty'), content = $('#translateContent');
+  if(!state.files.length){
+    empty.style.display='block'; content.style.display='none';
+    return;
+  }
+  empty.style.display='none'; content.style.display='block';
+  if(!state.currentFileId || !getFile(state.currentFileId)) state.currentFileId = state.files[0].id;
+
+  const sel = $('#fileSelect');
+  sel.innerHTML = state.files.map(f=>{
+    const c = totalCounts(f);
+    return `<option value="${f.id}" ${f.id===state.currentFileId?'selected':''}>${esc(t('file_select_option', {name:f.name, done:c.done, total:c.total}))}</option>`;
+  }).join('');
+
+  const file = getFile(state.currentFileId);
+  const idx = state.files.findIndex(f=>f.id===file.id);
+  $('#prevFileBtn').disabled = idx<=0;
+  $('#nextFileBtn').disabled = idx>=state.files.length-1;
+
+  const {total, done} = totalCounts(file);
+  $('#progressFill').style.width = total? `${Math.round(done/total*100)}%` : '0%';
+  $('#progressLabel').textContent = t('progress_label', {done, total});
+
+  const body = $('#translateBody');
+  body.innerHTML = '';
+  let runningIndex = 0;
+  file.blocks.forEach((block, bi)=>{
+    const headTr = document.createElement('tr');
+    headTr.className='block-head';
+    const startNum = runningIndex+1; runningIndex += block.entries.length;
+    const range = block.entries.length ? `#${startNum}\u2013${runningIndex}` : '';
+    const statusLabel = blockStatusLabel(block.status);
+    headTr.innerHTML = `<td colspan="2"><div class="bh-wrap">
+        <span>${esc(t('block_label', {n:bi+1, range}))}</span>
+        <span class="bh-status ${block.status}" id="block-status-${block.id}">${esc(statusLabel)}</span>
+        ${block.status==='error' && block.error ? `<span class="bh-err">${esc(block.error)}</span>` : ''}
+        <span style="flex:1"></span>
+        <button class="btn btn-sm retranslate-btn" data-block="${block.id}" ${block.status==='translating'?'disabled':''}>${esc(t('retranslate'))}</button>
+      </div></td>`;
+    body.appendChild(headTr);
+
+    for(const e of block.entries){
+      const tr = document.createElement('tr');
+      tr.className='entry-row';
+      const time = e.start ? `<span class="entry-time">${esc(e.start)} → ${esc(e.end)}</span>` : '';
+      tr.innerHTML = `
+        <td>${time}<div class="entry-orig" dir="auto">${esc(e.text)}</div></td>
+        <td><textarea class="entry-translated" dir="auto" data-entry="${e.id}" placeholder="${esc(t('entry_translated_placeholder'))}">${esc(e.translated)}</textarea></td>`;
+      body.appendChild(tr);
+    }
+  });
+
+  $all('.retranslate-btn', body).forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const block = file.blocks.find(b=>b.id===btn.dataset.block);
+      if(block) translateBlock(file, block);
+    });
+  });
+  $all('.entry-translated', body).forEach(ta=>{
+    ta.addEventListener('input', ()=>{
+      const e = file.entries.find(x=>x.id===ta.dataset.entry);
+      if(!e) return;
+      e.translated = ta.value;
+      const block = file.blocks.find(b=>b.entries.includes(e));
+      if(block){
+        const allFilled = block.entries.every(x=>x.translated && x.translated.trim()!=='');
+        if(allFilled){ block.status='done'; block.error=null; }
+        else if(block.status==='done'){ block.status='pending'; }
+        const statusEl = document.getElementById('block-status-'+block.id);
+        if(statusEl){
+          statusEl.className = 'bh-status '+block.status;
+          statusEl.textContent = blockStatusLabel(block.status);
+        }
+      }
+      const {total,done} = totalCounts(file);
+      $('#progressFill').style.width = total? `${Math.round(done/total*100)}%` : '0%';
+      $('#progressLabel').textContent = t('progress_label', {done, total});
+      updateStepBadges();
+    });
+    ta.addEventListener('blur', ()=>{ renderDownloadPanel(); saveFileToCache(file); });
+  });
+
+  updateTranslateControls();
+  updateStepBadges();
+}
+
+function updateTranslateControls(){
+  $('#translateFileBtn').disabled = TR.running;
+  $('#translateAllBtn').disabled = TR.running;
+  $('#pauseBtn').style.display = (TR.running && !TR.paused) ? 'inline-flex':'none';
+  $('#resumeBtn').style.display = (TR.running && TR.paused) ? 'inline-flex':'none';
+  const pill = $('#statusPill'), txt = $('#statusPillText');
+  if(TR.running){
+    pill.classList.add('live');
+    txt.textContent = TR.paused ? t('status_paused') : t('status_translating');
+  } else {
+    pill.classList.remove('live');
+    txt.textContent = t('status_idle');
+  }
+}
+
+/* ============================================================
+   RENDER: DOWNLOAD PANEL
+   ============================================================ */
+function renderDownloadPanel(){
+  const empty = $('#downloadEmpty'), list = $('#dlList'), zipRow = $('#dlZipRow');
+  if(!state.files.length){
+    empty.style.display='block'; list.innerHTML=''; zipRow.style.display='none';
+    return;
+  }
+  empty.style.display='none';
+  list.innerHTML = state.files.map(f=>{
+    const {total,done} = totalCounts(f);
+    return `<li class="dl-row">
+      <span class="fmt-badge">${f.format.toUpperCase()}</span>
+      <span class="fname">${esc(f.name)}</span>
+      <span class="fmeta">${esc(t('dl_meta', {done, total}))}</span>
+      <button class="btn btn-sm ${done? 'btn-primary':''}" data-id="${f.id}" ${done===0?'disabled':''}>${esc(t('download_button'))}</button>
+    </li>`;
+  }).join('');
+  $all('.dl-row button', list).forEach(btn=>{
+    btn.addEventListener('click', ()=>downloadFile(btn.dataset.id));
+  });
+  const anyDone = state.files.some(f=>totalCounts(f).done>0);
+  zipRow.style.display = state.files.length>1 ? 'flex' : 'none';
+  $('#downloadZipBtn').disabled = !anyDone;
+}
+
+function saveBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+
+function downloadFile(id){
+  const file = getFile(id); if(!file) return;
+  const content = getFileContent(file);
+  saveBlob(new Blob([content], {type:'text/plain;charset=utf-8'}), exportFilename(file));
+}
+
+async function downloadAllZip(){
+  if(typeof JSZip==='undefined'){ toast(t('toast_zip_lib_failed'), 'error'); return; }
+  const zip = new JSZip();
+  state.files.forEach(f=> zip.file(exportFilename(f), getFileContent(f)));
+  const blob = await zip.generateAsync({type:'blob'});
+  saveBlob(blob, 'NeoSubTranslator_export.zip');
+  toast(t('toast_zip_downloaded'), 'success');
+}
+
+/* ============================================================
+   STEP NAV
+   ============================================================ */
+function setStep(step){
+  state.activeStep = step;
+  $all('.step').forEach(s=> s.classList.toggle('active', s.dataset.step===step));
+  $all('.panel').forEach(p=> p.classList.toggle('active', p.id==='panel-'+step));
+}
+function updateStepBadges(){
+  const bf = $('#badgeFiles');
+  if(state.files.length){ bf.style.display='inline-flex'; bf.textContent = state.files.length; }
+  else bf.style.display='none';
+  const bt = $('#badgeTranslate');
+  const totalDone = state.files.reduce((a,f)=>a+totalCounts(f).done,0);
+  const totalAll = state.files.reduce((a,f)=>a+totalCounts(f).total,0);
+  if(totalAll){ bt.style.display='inline-flex'; bt.textContent = `${totalDone}/${totalAll}`; }
+  else bt.style.display='none';
+}
+
+/* ============================================================
+   PROMPT BUILDING & API CALLS
+   ============================================================ */
+function buildInstructions(file){
+  const s = state.settings;
+  const parts = [];
+  parts.push(`You are a professional subtitle translator.`);
+  parts.push(`Translate each line into ${s.targetLanguage || 'the target language'}.`);
+  parts.push(`Tone: ${s.tone}.`);
+  parts.push(s.explicit
+    ? `Translate mature, profane, or explicit content faithfully and without censorship or softening — preserve the original register exactly.`
+    : `Keep the translation faithful; do not add content beyond what the source expresses.`);
+  parts.push(`Keep each translated line concise enough for on-screen subtitles. Preserve line breaks within a line using \\n. Do not merge, split, reorder, or omit lines — return exactly one translation per input line, in the same order.`);
+  if(file.format==='ass'){
+    parts.push(`The source may contain ASS/SSA override tags in curly braces like {\\i1} or {\\pos(x,y)} — keep these tags unchanged and only translate the natural-language text around them.`);
+  }
+  if(s.extraInstructions && s.extraInstructions.trim()){
+    parts.push(`Additional instructions from the user: ${s.extraInstructions.trim()}`);
+  }
+  parts.push(`Respond with ONLY a JSON object of the exact form {"translations": ["...", "..."]} with no markdown formatting, no code fences, and no commentary outside the JSON.`);
+  return parts.join(' ');
+}
+
+function parseModelJSON(raw, expectedCount){
+  let s = String(raw||'').trim();
+  s = s.replace(/^```[a-z]*\n?/i,'').replace(/```$/,'').trim();
+  const first = s.indexOf('{'); const last = s.lastIndexOf('}');
+  if(first!==-1 && last!==-1 && last>first) s = s.slice(first, last+1);
+  const obj = JSON.parse(s);
+  if(!obj || !Array.isArray(obj.translations)) throw new Error(t('err_translations_missing'));
+  return obj.translations.map(x=> x==null ? '' : String(x));
+}
+
+function getActiveProfile(){
+  return state.profiles.find(p=>p.id===state.activeProfileId) || null;
+}
+function isGeminiStyle(type){ return type==='gemini'; }
+
+function friendlyFetchError(err, type, endpoint){
+  const msg = (err && err.message) || String(err);
+  const looksNetworkish = err instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(msg);
+  if(!looksNetworkish) return msg;
+  if(type==='openai'){
+    return t('err_cors_openai');
+  }
+  let host = '';
+  try{ host = new URL(endpoint).hostname; }catch(e){}
+  if(/^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)$/i.test(host)){
+    return t('err_cors_local', {host});
+  }
+  return t('err_cors_generic');
+}
+
+function parseSSEChatContent(raw){
+  let content = '';
+  for(const line of raw.split(/\r?\n/)){
+    const trimmed = line.trim();
+    if(!trimmed.startsWith('data:')) continue;
+    const payload = trimmed.slice(5).trim();
+    if(!payload || payload === '[DONE]') continue;
+    try{
+      const obj = JSON.parse(payload);
+      const delta = obj?.choices?.[0]?.delta?.content;
+      const full = obj?.choices?.[0]?.message?.content;
+      if(typeof delta === 'string') content += delta;
+      else if(typeof full === 'string') content += full;
+    }catch(e){ /* skip malformed chunk */ }
+  }
+  return content;
+}
+
+async function callTranslateAPI(profile, apiKey, lines, instructions){
+  const endpoint = (profile.endpoint||'').replace(/\/+$/,'');
+  const payload = JSON.stringify(lines);
+  const userPrompt = `${instructions}\n\nTranslate this JSON array of ${lines.length} subtitle line(s):\n${payload}`;
+
+  try{
+    if(isGeminiStyle(profile.type)){
+      const url = `${endpoint}/v1beta/models/${encodeURIComponent(profile.model)}:generateContent`;
+      const res = await fetch(url, {
+        method:'POST', headers:{'Content-Type':'application/json', 'x-goog-api-key': apiKey},
+        body: JSON.stringify({
+          contents:[{ role:'user', parts:[{text:userPrompt}] }],
+          generationConfig:{ temperature:0.4, responseMimeType:'application/json' }
+        })
+      });
+      if(!res.ok){ const errText = await res.text().catch(()=> ''); throw new Error(`HTTP ${res.status} — ${errText.slice(0,200)}`); }
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join('') || '';
+      if(!text) throw new Error(t('err_empty_response'));
+      return parseModelJSON(text, lines.length);
+    } else {
+      const url = `${endpoint}/chat/completions`;
+      const body = {
+        model: profile.model,
+        messages:[
+          {role:'system', content: instructions},
+          {role:'user', content: `Translate this JSON array of ${lines.length} subtitle line(s):\n${payload}`}
+        ],
+        temperature:0.4,
+        stream: false
+      };
+      if(profile.type==='openai') body.response_format = {type:'json_object'};
+      const res = await fetch(url, {
+        method:'POST',
+        headers:{'Content-Type':'application/json', 'Authorization': `Bearer ${apiKey}`},
+        body: JSON.stringify(body)
+      });
+      const rawText = await res.text();
+      if(!res.ok){ throw new Error(`HTTP ${res.status} — ${rawText.slice(0,200)}`); }
+      const ctype = res.headers.get('content-type') || '';
+      let text;
+      if(ctype.includes('text/event-stream') || /^\s*data:/.test(rawText)){
+        // The endpoint streamed anyway despite stream:false — reassemble it.
+        text = parseSSEChatContent(rawText);
+      } else {
+        let data;
+        try{ data = JSON.parse(rawText); }
+        catch(e){ throw new Error(t('err_response_not_json', {text: rawText.slice(0,200)})); }
+        text = data?.choices?.[0]?.message?.content || '';
+      }
+      if(!text) throw new Error(t('err_empty_response'));
+      return parseModelJSON(text, lines.length);
+    }
+  }catch(err){
+    throw new Error(friendlyFetchError(err, profile.type, endpoint));
+  }
+}
+
+async function translateBlock(file, block){
+  if(!block.entries.length) return;
+  const profile = getActiveProfile();
+  if(!profile){ toast(t('toast_no_active_endpoint'), 'error'); openSettings('profiles'); return; }
+  if(!profile.model){ toast(t('toast_no_model_selected'), 'error'); openSettings('profiles'); return; }
+  const apiKey = apiKeyPlain[profile.id] || '';
+  if(!apiKey){ toast(t('toast_no_api_key'), 'error'); openSettings('profiles'); return; }
+
+  block.status = 'translating'; block.error = null;
+  renderTranslatePanel();
+  try{
+    const instructions = buildInstructions(file);
+    const lines = block.entries.map(e=>e.text);
+    const result = await callTranslateAPI(profile, apiKey, lines, instructions);
+    if(result.length !== block.entries.length){
+      throw new Error(t('err_model_count_mismatch', {got:result.length, expected:block.entries.length}));
+    }
+    block.entries.forEach((e,i)=>{ e.translated = result[i]; });
+    block.status = 'done';
+    saveFileToCache(file);
+  }catch(err){
+    block.status = 'error';
+    block.error = err.message || String(err);
+    toast(t('toast_block_failed', {msg:block.error}), 'error');
+  }
+  renderTranslatePanel();
+  renderDownloadPanel();
+}
+
+async function cooldownWait(sec){
+  let remaining = Math.max(0, sec*1000);
+  while(remaining>0){
+    if(TR.cancel) return;
+    if(TR.paused){ await sleep(200); continue; }
+    const step = Math.min(200, remaining);
+    await sleep(step);
+    remaining -= step;
+  }
+}
+
+async function translateBlocksOfFile(file){
+  for(const block of file.blocks){
+    if(TR.cancel) return;
+    while(TR.paused && !TR.cancel) await sleep(200);
+    if(TR.cancel) return;
+    if(block.status==='done') continue;
+    await translateBlock(file, block);
+    if(TR.cancel) return;
+    await cooldownWait(state.settings.cooldownSec);
+  }
+}
+
+async function translateCurrentFile(){
+  if(TR.running) return;
+  const file = getFile(state.currentFileId);
+  if(!file) return;
+  TR.running = true; TR.cancel = false; TR.paused = false;
+  updateTranslateControls();
+  await translateBlocksOfFile(file);
+  TR.running = false;
+  updateTranslateControls();
+  renderTranslatePanel(); renderDownloadPanel();
+}
+
+async function translateAllFiles(){
+  if(TR.running) return;
+  TR.running = true; TR.cancel = false; TR.paused = false;
+  updateTranslateControls();
+  for(const file of state.files){
+    if(TR.cancel) break;
+    state.currentFileId = file.id;
+    renderTranslatePanel();
+    await translateBlocksOfFile(file);
+  }
+  TR.running = false;
+  updateTranslateControls();
+  renderTranslatePanel(); renderDownloadPanel();
+}
+
+/* ============================================================
+   SETTINGS DRAWER
+   ============================================================ */
+function openSettings(tab){
+  $('#settingsDrawer').classList.add('open');
+  $('#drawerOverlay').classList.add('show');
+  if(tab) switchDrawerTab(tab);
+}
+function closeSettings(){
+  $('#settingsDrawer').classList.remove('open');
+  $('#drawerOverlay').classList.remove('show');
+}
+function switchDrawerTab(tab){
+  $all('.drawer-tabs button').forEach(b=> b.classList.toggle('active', b.dataset.tab===tab));
+  $all('.dtab').forEach(d=> d.classList.toggle('active', d.id==='tab-'+tab));
+}
+
+const providerDefaults = {
+  'gemini': 'https://generativelanguage.googleapis.com',
+  'openai': 'https://api.openai.com/v1',
+  'custom-openai': ''
+};
+const providerNoteKeys = {
+  'gemini': 'provider_note_gemini',
+  'openai': 'provider_note_openai',
+  'custom-openai': 'provider_note_custom'
+};
+
+let editingProfileId = null;
+
+function updateProfileFormForType(){
+  const ptype = $('#pfType').value;
+  const isCustom = ptype === 'custom-openai';
+  $('#pfEndpointField').style.display = isCustom ? 'block' : 'none';
+  $('#pfEndpointFixed').style.display = isCustom ? 'none' : 'block';
+  if(!isCustom){
+    $('#pfEndpoint').value = providerDefaults[ptype] || '';
+    $('#pfEndpointFixedText').textContent = providerDefaults[ptype] || '';
+  }
+  $('#pfProviderNote').textContent = providerNoteKeys[ptype] ? t(providerNoteKeys[ptype]) : '';
+}
+
+function renderProfileList(){
+  const wrap = $('#profileList');
+  if(!state.profiles.length){
+    wrap.innerHTML = `<div class="empty-state">${esc(t('no_endpoints'))}</div>`;
+    return;
+  }
+  wrap.innerHTML = state.profiles.map(p=>`
+    <div class="profile-card ${p.id===state.activeProfileId?'active':''}">
+      <div class="pc-top">
+        <span class="pc-name">${esc(p.name)}</span>
+        <span class="pc-type">${esc(p.type)}</span>
+      </div>
+      <div class="pc-meta">${esc(p.endpoint)} · ${esc(p.model||t('no_model_selected'))}</div>
+      <div class="pc-actions">
+        <button class="btn btn-sm ${p.id===state.activeProfileId?'btn-primary':''}" data-act="use" data-id="${p.id}">${p.id===state.activeProfileId?esc(t('profile_active')):esc(t('profile_use'))}</button>
+        <button class="btn btn-sm" data-act="edit" data-id="${p.id}">${esc(t('profile_edit'))}</button>
+        <button class="btn btn-sm btn-danger" data-act="delete" data-id="${p.id}">${esc(t('profile_delete'))}</button>
+      </div>
+    </div>`).join('');
+
+  $all('.pc-actions button', wrap).forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.id, act = btn.dataset.act;
+      if(act==='use'){ state.activeProfileId = id; saveSettings(); renderProfileList(); }
+      else if(act==='delete'){ deleteProfile(id); }
+      else if(act==='edit'){ editProfile(id); }
+    });
+  });
+}
+
+function resetProfileForm(){
+  editingProfileId = null;
+  $('#profileFormTitle').textContent = t('add_endpoint');
+  $('#pfName').value=''; $('#pfType').value='gemini';
+  $('#pfApiKey').value=''; $('#pfApiKey').placeholder='sk-...';
+  $('#pfModel').innerHTML = `<option value="">${esc(t('fetch_models_first'))}</option>`;
+  $('#cancelEditProfileBtn').style.display='none';
+  updateProfileFormForType();
+}
+
+function editProfile(id){
+  const p = state.profiles.find(x=>x.id===id); if(!p) return;
+  editingProfileId = id;
+  $('#profileFormTitle').textContent = t('edit_endpoint');
+  $('#pfName').value = p.name;
+  $('#pfType').value = p.type;
+  $('#pfEndpoint').value = p.endpoint;
+  $('#pfApiKey').value = '';
+  $('#pfApiKey').placeholder = t('leave_blank_key');
+  $('#pfModel').innerHTML = p.model ? `<option value="${esc(p.model)}">${esc(p.model)}</option>` : `<option value="">${esc(t('fetch_models_first'))}</option>`;
+  $('#cancelEditProfileBtn').style.display='inline-flex';
+  updateProfileFormForType();
+  switchDrawerTab('profiles');
+}
+
+function deleteProfile(id){
+  if(!confirm(t('confirm_delete_endpoint'))) return;
+  state.profiles = state.profiles.filter(p=>p.id!==id);
+  delete apiKeyPlain[id];
+  if(state.activeProfileId===id) state.activeProfileId = state.profiles[0]?.id || null;
+  saveSettings(); renderProfileList();
+  if(editingProfileId===id) resetProfileForm();
+}
+
+async function saveProfileFromForm(){
+  const name = $('#pfName').value.trim() || t('untitled_endpoint');
+  const type = $('#pfType').value;
+  const endpoint = (type==='custom-openai' ? $('#pfEndpoint').value.trim() : providerDefaults[type]) || '';
+  const apiKeyInput = $('#pfApiKey').value;
+  const model = $('#pfModel').value;
+
+  if(!endpoint){ toast(t('toast_enter_endpoint_url'), 'error'); return; }
+
+  let id = editingProfileId;
+  let apiKeyEnc = null;
+  if(id){
+    const existing = state.profiles.find(p=>p.id===id);
+    apiKeyEnc = existing ? existing.apiKeyEnc : null;
+  }
+  if(apiKeyInput){
+    apiKeyEnc = await CryptoStore.encrypt(apiKeyInput);
+    apiKeyPlain[id||'__pending__'] = apiKeyInput;
+  }
+
+  if(!id){
+    id = uid();
+    if(apiKeyPlain['__pending__']!==undefined){ apiKeyPlain[id] = apiKeyPlain['__pending__']; delete apiKeyPlain['__pending__']; }
+    state.profiles.push({ id, name, type, endpoint, model, apiKeyEnc });
+    if(!state.activeProfileId) state.activeProfileId = id;
+  } else {
+    const p = state.profiles.find(x=>x.id===id);
+    Object.assign(p, {name, type, endpoint, model, apiKeyEnc});
+    if(apiKeyInput) apiKeyPlain[id] = apiKeyInput;
+  }
+
+  saveSettings();
+  renderProfileList();
+  resetProfileForm();
+  toast(t('toast_endpoint_saved'), 'success');
+}
+
+function extractModelIdsFallback(data){
+  const found = new Set();
+  (function walk(node){
+    if(!node) return;
+    if(Array.isArray(node)){ node.forEach(walk); return; }
+    if(typeof node === 'object'){
+      if(typeof node.id === 'string') found.add(node.id);
+      Object.values(node).forEach(walk);
+    }
+  })(data);
+  return Array.from(found);
+}
+
+async function fetchModelsForForm(){
+  const type = $('#pfType').value;
+  const endpoint = (type==='custom-openai' ? $('#pfEndpoint').value.trim() : providerDefaults[type] || '').replace(/\/+$/,'');
+  const apiKey = $('#pfApiKey').value || (editingProfileId ? apiKeyPlain[editingProfileId] : '');
+  if(!endpoint){ toast(t('toast_enter_endpoint_url_first'), 'error'); return; }
+  if(!apiKey){ toast(t('toast_enter_api_key_first'), 'error'); return; }
+  const btn = $('#fetchModelsBtn'); const oldTxt = btn.textContent;
+  btn.textContent = t('fetching_ellipsis'); btn.disabled = true;
+  try{
+    let models = [];
+    if(isGeminiStyle(type)){
+      const res = await fetch(`${endpoint}/v1beta/models`, { headers:{ 'x-goog-api-key': apiKey } });
+      if(!res.ok){ const errText = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${errText?' — '+errText.slice(0,200):''}`); }
+      const data = await res.json();
+      models = (data.models||[])
+        .filter(m=> !m.supportedGenerationMethods || m.supportedGenerationMethods.includes('generateContent'))
+        .map(m=>({ id: (m.name||'').replace(/^models\//,''), label: m.displayName || m.name }));
+    } else {
+      const res = await fetch(`${endpoint}/models`, { headers:{ 'Authorization': `Bearer ${apiKey}` } });
+      if(!res.ok){ const errText = await res.text().catch(()=>''); throw new Error(`HTTP ${res.status}${errText?' — '+errText.slice(0,200):''}`); }
+      const data = await res.json();
+      let ids;
+      if(Array.isArray(data.data)) ids = data.data.map(m=> typeof m==='string' ? m : m.id).filter(Boolean);
+      else if(Array.isArray(data)) ids = data.map(m=> typeof m==='string' ? m : m.id).filter(Boolean);
+      else ids = extractModelIdsFallback(data);
+      ids = Array.from(new Set(ids));
+      models = ids.map(id=>({ id, label:id }));
+    }
+    if(!models.length){ toast(t('toast_no_models_returned'), 'error'); return; }
+    models.sort((a,b)=> a.id.localeCompare(b.id));
+    $('#pfModel').innerHTML = models.map(m=>`<option value="${esc(m.id)}">${esc(m.label)}</option>`).join('');
+    toast(t('toast_loaded_models', {count:models.length}), 'success');
+  }catch(err){
+    toast(t('toast_failed_fetch_models', {msg: friendlyFetchError(err, type, endpoint)}), 'error');
+  }finally{
+    btn.textContent = oldTxt; btn.disabled = false;
+  }
+}
+
+function renderPrefsForm(){
+  $('#targetLanguage').value = state.settings.targetLanguage;
+  $('#toneSelect').value = state.settings.tone;
+  $('#cooldownInput').value = state.settings.cooldownSec;
+  $('#extraInstructions').value = state.settings.extraInstructions;
+  $('#explicitToggle').checked = !!state.settings.explicit;
+}
+function wirePrefsAutosave(){
+  $('#targetLanguage').addEventListener('input', ()=>{ state.settings.targetLanguage = $('#targetLanguage').value; saveSettings(); });
+  $('#toneSelect').addEventListener('change', ()=>{ state.settings.tone = $('#toneSelect').value; saveSettings(); });
+  $('#cooldownInput').addEventListener('input', ()=>{ state.settings.cooldownSec = parseFloat($('#cooldownInput').value)||0; saveSettings(); });
+  $('#extraInstructions').addEventListener('input', ()=>{ state.settings.extraInstructions = $('#extraInstructions').value; saveSettings(); });
+  $('#explicitToggle').addEventListener('change', ()=>{ state.settings.explicit = $('#explicitToggle').checked; saveSettings(); });
+  $('#clearCacheBtn').addEventListener('click', async ()=>{
+    if(!confirm(t('confirm_clear_cache'))) return;
+    try{
+      await CacheStore.clearAll();
+      toast(t('toast_cache_cleared'), 'success');
+    }catch(e){
+      toast(t('toast_failed_clear_cache', {msg:e.message}), 'error');
+    }
+  });
+}
+
+/* ============================================================
+   THEME
+   ============================================================ */
+const sunSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
+const moonSVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>`;
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', state.theme);
+  $('#themeToggle').innerHTML = state.theme==='dark' ? sunSVG : moonSVG;
+}
+function toggleTheme(){
+  state.theme = state.theme==='dark' ? 'light' : 'dark';
+  applyTheme(); saveSettings();
+}
+
+/* ============================================================
+   WIRE UP EVENTS
+   ============================================================ */
+function wireEvents(){
+  // step nav
+  $all('.step').forEach(s=> s.addEventListener('click', ()=>setStep(s.dataset.step)));
+
+  // files
+  const dz = $('#dropzone'), fi = $('#fileInput');
+  fi.addEventListener('change', e=>{ handleFiles(e.target.files); fi.value=''; });
+  ['dragenter','dragover'].forEach(ev=> dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(ev=> dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.remove('drag'); }));
+  dz.addEventListener('drop', e=>{ if(e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); });
+
+  $('#linesPerBlockInput').addEventListener('change', ()=>{
+    state.linesPerBlock = Math.max(1, parseInt($('#linesPerBlockInput').value)||30);
+    saveSettings();
+  });
+  $('#applyChunkBtn').addEventListener('click', ()=>{
+    state.linesPerBlock = Math.max(1, parseInt($('#linesPerBlockInput').value)||30);
+    state.files.forEach(f=>{ f.blocks = chunkEntries(f.entries, state.linesPerBlock); });
+    saveSettings();
+    renderFilesPanel(); renderTranslatePanel();
+    toast(t('toast_applied_chunk'), 'success');
+  });
+  $('#clearAllBtn').addEventListener('click', clearAllFiles);
+  $('#goToTranslateBtn').addEventListener('click', ()=>setStep('translate'));
+
+  // translate
+  $('#fileSelect').addEventListener('change', ()=>{ state.currentFileId = $('#fileSelect').value; renderTranslatePanel(); });
+  $('#prevFileBtn').addEventListener('click', ()=>{
+    const idx = state.files.findIndex(f=>f.id===state.currentFileId);
+    if(idx>0){ state.currentFileId = state.files[idx-1].id; renderTranslatePanel(); }
+  });
+  $('#nextFileBtn').addEventListener('click', ()=>{
+    const idx = state.files.findIndex(f=>f.id===state.currentFileId);
+    if(idx<state.files.length-1){ state.currentFileId = state.files[idx+1].id; renderTranslatePanel(); }
+  });
+  $('#translateFileBtn').addEventListener('click', translateCurrentFile);
+  $('#translateAllBtn').addEventListener('click', translateAllFiles);
+  $('#pauseBtn').addEventListener('click', ()=>{ TR.paused = true; updateTranslateControls(); });
+  $('#resumeBtn').addEventListener('click', ()=>{ TR.paused = false; updateTranslateControls(); });
+
+  // download
+  $('#downloadZipBtn').addEventListener('click', downloadAllZip);
+
+  // settings drawer
+  $('#settingsBtn').addEventListener('click', ()=>openSettings());
+  $('#closeSettingsBtn').addEventListener('click', closeSettings);
+  $('#drawerOverlay').addEventListener('click', closeSettings);
+  $all('.drawer-tabs button').forEach(b=> b.addEventListener('click', ()=>switchDrawerTab(b.dataset.tab)));
+  $('#pfType').addEventListener('change', updateProfileFormForType);
+  $('#fetchModelsBtn').addEventListener('click', fetchModelsForForm);
+  $('#saveProfileBtn').addEventListener('click', saveProfileFromForm);
+  $('#cancelEditProfileBtn').addEventListener('click', resetProfileForm);
+
+  wirePrefsAutosave();
+  $('#themeToggle').addEventListener('click', toggleTheme);
+  $('#langToggleBtn').addEventListener('click', toggleLanguage);
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+async function init(){
+  loadSettings();
+  applyTheme();
+  applyLanguage();
+  resetProfileForm();
+  renderPrefsForm();
+  renderProfileList();
+  renderFilesPanel();
+  renderTranslatePanel();
+  renderDownloadPanel();
+  wireEvents();
+
+  // decrypt stored API keys into memory (best-effort, non-blocking for UI)
+  for(const p of state.profiles){
+    apiKeyPlain[p.id] = await CryptoStore.decrypt(p.apiKeyEnc);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>
