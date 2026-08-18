@@ -267,6 +267,29 @@ tr.entry-row td:last-child{border-right:1px solid var(--border-soft); border-rad
 .field-row{display:flex; gap:10px;}
 .field-row .field{flex:1;}
 
+.field input[type=range]{
+  -webkit-appearance:none; appearance:none; width:100%; height:6px; border-radius:999px;
+  background:var(--border); outline:none; cursor:pointer; margin:6px 0 2px; padding:0;
+}
+.field input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:50%;
+  background:var(--accent); border:2px solid var(--bg-elev); box-shadow:var(--shadow); cursor:pointer;
+}
+.field input[type=range]::-moz-range-thumb{
+  width:18px; height:18px; border-radius:50%; background:var(--accent);
+  border:2px solid var(--bg-elev); box-shadow:var(--shadow); cursor:pointer;
+}
+.temp-desc-main{font-size:13px; font-weight:700; color:var(--text); margin-top:8px;}
+.temp-desc-main .temp-default-tag{font-weight:600; color:var(--accent2); font-size:11.5px; margin-left:4px;}
+html[dir="rtl"] .temp-desc-main .temp-default-tag{margin-left:0; margin-right:4px;}
+.temp-desc-sub{font-size:11.5px; color:var(--text-faint); margin-top:2px; line-height:1.4;}
+.field-label-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;}
+.field-label-row label{margin-bottom:0;}
+.temp-value{
+  font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--accent);
+  background:var(--accent-soft); border-radius:6px; padding:2px 7px; min-width:30px; text-align:center;
+}
+
 .switch-row{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 0;}
 .switch-row .lbl strong{display:block; font-size:13px;}
 .switch-row .lbl span{font-size:11.5px; color:var(--text-faint);}
@@ -524,6 +547,18 @@ tr.entry-row td:last-child{border-right:1px solid var(--border-soft); border-rad
         <input type="number" id="cooldownInput" min="0" step="0.5" value="1">
       </div>
       <div class="field">
+        <div class="field-label-row">
+          <label for="temperatureInput" data-i18n="field_temperature">Temperature</label>
+          <span class="temp-value" id="temperatureValue">0.4</span>
+        </div>
+        <input type="range" id="temperatureInput" min="0" max="1" step="0.1" value="0.4">
+        <div class="temp-desc-main">
+          <span id="temperatureDescMainText" data-i18n="temp_main_balanced">Balanced</span>
+          <span class="temp-default-tag" id="temperatureDefaultTag" data-i18n="temp_default_tag">(Default)</span>
+        </div>
+        <div class="temp-desc-sub" id="temperatureDescSub" data-i18n="temp_sub_balanced">(General translation, subtitles, smooth and natural text)</div>
+      </div>
+      <div class="field">
         <label for="extraInstructions" data-i18n="field_extra_instructions">Additional instructions</label>
         <textarea id="extraInstructions" data-i18n-placeholder="extra_instructions_placeholder" placeholder="Any custom guidance for the translator, e.g. preferred glossary, honorifics, character names…"></textarea>
       </div>
@@ -566,6 +601,7 @@ const state = {
     targetLanguage: 'Spanish',
     tone: 'Neutral',
     cooldownSec: 1,
+    temperature: 0.4,
     extraInstructions: '',
     explicit: false
   }
@@ -610,6 +646,13 @@ en:{
   field_tone:'Tone', tone_neutral:'Neutral', tone_formal:'Formal', tone_casual:'Casual', tone_playful:'Playful',
   tone_dramatic:'Dramatic', tone_literal:'Literal / word-for-word', tone_poetic:'Poetic',
   field_cooldown:'Cooldown between blocks (seconds)',
+  field_temperature:'Temperature',
+  temp_main_conservative:'Very precise and conservative', temp_sub_conservative:'(Technical, legal, data-driven translation, sensitive texts)',
+  temp_main_faithful:'Precise and faithful', temp_sub_faithful:'(Professional, educational, specialized translation)',
+  temp_main_balanced:'Balanced', temp_sub_balanced:'(General translation, subtitles, smooth and natural text)',
+  temp_main_freer:'Creative and freer', temp_sub_freer:'(Localization, advertising, rewriting)',
+  temp_main_very_creative:'Very creative', temp_sub_very_creative:'(Brainstorming, creative writing, recreation)',
+  temp_default_tag:'(Default)',
   field_extra_instructions:'Additional instructions', extra_instructions_placeholder:'Any custom guidance for the translator, e.g. preferred glossary, honorifics, character names…',
   explicit_title:'Explicit translation', explicit_desc:'Translate mature or profane content faithfully, uncensored.',
   cache_title:'Translation cache', cache_desc:'Re-importing a file you\u2019ve translated before resumes automatically. Clearing wipes all cached progress for every file.',
@@ -680,6 +723,13 @@ fa:{
   field_tone:'لحن', tone_neutral:'خنثی', tone_formal:'رسمی', tone_casual:'محاوره‌ای', tone_playful:'شوخ‌طبعانه',
   tone_dramatic:'دراماتیک', tone_literal:'تحت‌اللفظی / کلمه‌به‌کلمه', tone_poetic:'شاعرانه',
   field_cooldown:'فاصله زمانی بین بلوک‌ها (ثانیه)',
+  field_temperature:'دما (Temperature)',
+  temp_main_conservative:'بسیار دقیق و محافظه‌کارانه', temp_sub_conservative:'(ترجمه فنی، حقوقی، مبتنی بر داده، متون حساس)',
+  temp_main_faithful:'دقیق و وفادار به متن', temp_sub_faithful:'(ترجمه حرفه‌ای، آموزشی، تخصصی)',
+  temp_main_balanced:'متعادل', temp_sub_balanced:'(ترجمه عمومی، زیرنویس، متن روان و طبیعی)',
+  temp_main_freer:'خلاقانه و آزادتر', temp_sub_freer:'(بومی‌سازی، تبلیغات، بازنویسی)',
+  temp_main_very_creative:'بسیار خلاقانه', temp_sub_very_creative:'(ایده‌پردازی، نویسندگی خلاق، بازآفرینی)',
+  temp_default_tag:'(پیش‌فرض)',
   field_extra_instructions:'دستورالعمل‌های تکمیلی', extra_instructions_placeholder:'هر راهنمایی سفارشی برای مترجم، مثلاً واژه‌نامه ترجیحی، القاب، نام شخصیت‌ها…',
   explicit_title:'ترجمه بدون سانسور', explicit_desc:'محتوای بزرگسال یا نامناسب را دقیق و بدون سانسور ترجمه کن.',
   cache_title:'کش ترجمه', cache_desc:'با وارد کردن دوباره فایلی که قبلاً ترجمه کرده‌اید، ترجمه به‌طور خودکار از همان‌جا ادامه می‌یابد. پاک کردن کش، پیشرفت ذخیره‌شده همه فایل‌ها را حذف می‌کند.',
@@ -1056,7 +1106,56 @@ function chunkEntries(entries, size){
 /* ============================================================
    FILE REBUILDING (export)
    ============================================================ */
-function textOf(e){ return (e.translated && e.translated.trim()!=='') ? e.translated : e.text; }
+const RTL_LANGUAGE_NAMES = [
+  'arabic','persian','farsi','dari','hebrew','urdu','pashto','pushto',
+  'sindhi','kurdish (sorani)','sorani','sorani kurdish','yiddish',
+  'dhivehi','divehi','maldivian','uyghur','uighur'
+];
+function isRTLTargetLanguage(name){
+  const n = (name||'').trim().toLowerCase();
+  if(!n) return false;
+  return RTL_LANGUAGE_NAMES.some(rtl => n===rtl || n.includes(rtl));
+}
+const RLM = '\u200F'; // Right-to-Left Mark — zero-width, strong-RTL character
+const RLE = '\u202B'; // Right-to-Left Embedding — forces an explicit RTL run
+const PDF = '\u202C'; // Pop Directional Formatting — closes the RLE run
+// Matches (after any leading whitespace/quote/bracket punctuation) a strong left-to-right
+// character: Latin, extended Latin, Greek, or Cyrillic — i.e. "a word in English or any
+// other left-to-right language".
+const LTR_LINE_START_RE = /^[\s"'“”‘’(\[\{«]*[A-Za-z\u00C0-\u02AF\u0370-\u03FF\u0400-\u04FF]/;
+// Fixes two related RTL-rendering bugs in subtitle players (this affects .ass/.ssa most
+// often, since that format has no field to mark a line's paragraph direction at all — but
+// SRT/VTT/plain-text renderers with shaky bidi support can show the same symptoms):
+//  1) A line that opens with an English/Latin word gets the whole line's base direction
+//     mis-detected as left-to-right.
+//  2) Trailing/leading punctuation (. , ! ? : ; " ' ( ) — the "neutral" characters that
+//     have no direction of their own) gets attached to the wrong edge of the line, so it
+//     visually jumps from the end of the sentence to the start, or vice versa. This
+//     happens because neutral characters at a paragraph boundary inherit the *paragraph's*
+//     embedding direction rather than the direction of the RTL text next to them — and
+//     since most subtitle formats never declare "this paragraph is RTL", renderers assume
+//     LTR by default even in fully bidi-aware players (e.g. libass, which is what almost
+//     all .ass renderers use, via FriBidi).
+// The fix is the standard one used by Arabic/Persian/Hebrew subtitle typesetters: wrap
+// each line in an explicit Right-to-Left Embedding (RLE ... PDF). This forces every
+// neutral character in the line — including edge punctuation — to resolve against an
+// explicit RTL context instead of a guessed/default one, while leaving embedded LTR runs
+// (English names, numbers, etc.) internally ordered correctly. It's invisible, zero-width,
+// and has no effect on non-RTL targets or on renderers that don't support bidi controls.
+function fixRTLDirectionality(text, targetLanguage){
+  if(!isRTLTargetLanguage(targetLanguage)) return text;
+  return String(text||'').split('\n').map(line=>{
+    if(line==='') return line;
+    if(line.charAt(0)===RLE && line.charAt(line.length-1)===PDF) return line; // already fixed
+    let fixed = line;
+    if(fixed.charAt(0)!==RLM && LTR_LINE_START_RE.test(fixed)) fixed = RLM + fixed;
+    return RLE + fixed + PDF;
+  }).join('\n');
+}
+function textOf(e){
+  const raw = (e.translated && e.translated.trim()!=='') ? e.translated : e.text;
+  return fixRTLDirectionality(raw, state.settings.targetLanguage);
+}
 
 function rebuildSRT(file){
   return file.entries.map((e,i)=>{
@@ -1087,10 +1186,14 @@ function getFileContent(file){
     default: return rebuildTXT(file);
   }
 }
+function sanitizeForFilename(str){
+  return String(str||'').trim().replace(/[\\/:*?"<>|]+/g,'').replace(/\s+/g,'_');
+}
 function exportFilename(file){
   const base = file.name.replace(/\.[^.]+$/,'');
   const ext = file.format==='ass' ? (file.originalExt||'ass') : file.format;
-  return `${base}.translated.${ext}`;
+  const langSuffix = sanitizeForFilename(state.settings.targetLanguage) || 'translated';
+  return `${base}_${langSuffix}.${ext}`;
 }
 
 /* ============================================================
@@ -1476,7 +1579,7 @@ async function callTranslateAPI(profile, apiKey, lines, instructions){
         method:'POST', headers:{'Content-Type':'application/json', 'x-goog-api-key': apiKey},
         body: JSON.stringify({
           contents:[{ role:'user', parts:[{text:userPrompt}] }],
-          generationConfig:{ temperature:0.4, responseMimeType:'application/json' }
+          generationConfig:{ temperature: state.settings.temperature, responseMimeType:'application/json' }
         })
       });
       if(!res.ok){ const errText = await res.text().catch(()=> ''); throw new Error(`HTTP ${res.status} — ${errText.slice(0,200)}`); }
@@ -1492,7 +1595,7 @@ async function callTranslateAPI(profile, apiKey, lines, instructions){
           {role:'system', content: instructions},
           {role:'user', content: userText}
         ],
-        temperature:0.4,
+        temperature: state.settings.temperature,
         stream: false
       };
       if(profile.type==='openai') body.response_format = {type:'json_object'};
@@ -1822,10 +1925,30 @@ async function fetchModelsForForm(){
   }
 }
 
+function getTemperatureDescriptionKeys(v){
+  if(v <= 0.15) return {main:'temp_main_conservative', sub:'temp_sub_conservative'};
+  if(v <= 0.35) return {main:'temp_main_faithful', sub:'temp_sub_faithful'};
+  if(v <= 0.55) return {main:'temp_main_balanced', sub:'temp_sub_balanced'};
+  if(v <= 0.75) return {main:'temp_main_freer', sub:'temp_sub_freer'};
+  return {main:'temp_main_very_creative', sub:'temp_sub_very_creative'};
+}
+function updateTemperatureDescription(){
+  const v = state.settings.temperature;
+  const keys = getTemperatureDescriptionKeys(v);
+  $('#temperatureValue').textContent = v.toFixed(1);
+  $('#temperatureDescMainText').textContent = t(keys.main);
+  $('#temperatureDescMainText').dataset.i18n = keys.main;
+  $('#temperatureDescSub').textContent = t(keys.sub);
+  $('#temperatureDescSub').dataset.i18n = keys.sub;
+  const isDefault = Math.abs(v - 0.4) < 1e-9;
+  $('#temperatureDefaultTag').style.display = isDefault ? '' : 'none';
+}
 function renderPrefsForm(){
   $('#targetLanguage').value = state.settings.targetLanguage;
   $('#toneSelect').value = state.settings.tone;
   $('#cooldownInput').value = state.settings.cooldownSec;
+  $('#temperatureInput').value = state.settings.temperature;
+  updateTemperatureDescription();
   $('#extraInstructions').value = state.settings.extraInstructions;
   $('#explicitToggle').checked = !!state.settings.explicit;
 }
@@ -1833,6 +1956,11 @@ function wirePrefsAutosave(){
   $('#targetLanguage').addEventListener('input', ()=>{ state.settings.targetLanguage = $('#targetLanguage').value; saveSettings(); });
   $('#toneSelect').addEventListener('change', ()=>{ state.settings.tone = $('#toneSelect').value; saveSettings(); });
   $('#cooldownInput').addEventListener('input', ()=>{ state.settings.cooldownSec = parseFloat($('#cooldownInput').value)||0; saveSettings(); });
+  $('#temperatureInput').addEventListener('input', ()=>{
+    state.settings.temperature = parseFloat($('#temperatureInput').value)||0;
+    updateTemperatureDescription();
+    saveSettings();
+  });
   $('#extraInstructions').addEventListener('input', ()=>{ state.settings.extraInstructions = $('#extraInstructions').value; saveSettings(); });
   $('#explicitToggle').addEventListener('change', ()=>{ state.settings.explicit = $('#explicitToggle').checked; saveSettings(); });
   $('#clearCacheBtn').addEventListener('click', async ()=>{
