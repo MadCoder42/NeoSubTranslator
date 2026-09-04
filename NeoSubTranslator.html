@@ -566,6 +566,10 @@ html[dir="rtl"] .temp-desc-main .temp-default-tag{margin-left:0; margin-right:4p
         <div class="lbl"><strong data-i18n="explicit_title">Explicit translation</strong><span data-i18n="explicit_desc">Translate mature or profane content faithfully, uncensored.</span></div>
         <label class="switch"><input type="checkbox" id="explicitToggle"><span class="track"></span></label>
       </div>
+      <div class="switch-row">
+        <div class="lbl"><strong data-i18n="overlap_context_title">Overlapping context</strong><span data-i18n="overlap_context_desc">Send the last 5 lines of the previous block as reference context, so sentences that cross a block boundary keep a natural, consistent tone.</span></div>
+        <label class="switch"><input type="checkbox" id="overlapContextToggle"><span class="track"></span></label>
+      </div>
       <div class="divider"></div>
       <div class="switch-row">
         <div class="lbl"><strong data-i18n="cache_title">Translation cache</strong><span data-i18n="cache_desc">Re-importing a file you've translated before resumes automatically. Clearing wipes all cached progress for every file.</span></div>
@@ -603,9 +607,11 @@ const state = {
     cooldownSec: 1,
     temperature: 0.4,
     extraInstructions: '',
-    explicit: false
+    explicit: false,
+    overlappingContext: true
   }
 };
+const CONTEXT_LINES_COUNT = 5;
 const apiKeyPlain = {}; // profileId -> decrypted key, in-memory only
 
 const TR = { running:false, paused:false, cancel:false };
@@ -655,6 +661,7 @@ en:{
   temp_default_tag:'(Default)',
   field_extra_instructions:'Additional instructions', extra_instructions_placeholder:'Any custom guidance for the translator, e.g. preferred glossary, honorifics, character names…',
   explicit_title:'Explicit translation', explicit_desc:'Translate mature or profane content faithfully, uncensored.',
+  overlap_context_title:'Overlapping context', overlap_context_desc:'Send the last 5 lines of the previous block as reference context, so sentences that cross a block boundary keep a natural, consistent tone.',
   cache_title:'Translation cache', cache_desc:'Re-importing a file you\u2019ve translated before resumes automatically. Clearing wipes all cached progress for every file.',
   clear_cache:'Clear cache',
   files_empty:'No files added yet.', file_meta:'{lines} lines · {blocks} blocks', remove_file_aria:'Remove {name}',
@@ -732,6 +739,7 @@ fa:{
   temp_default_tag:'(پیش‌فرض)',
   field_extra_instructions:'دستورالعمل‌های تکمیلی', extra_instructions_placeholder:'هر راهنمایی سفارشی برای مترجم، مثلاً واژه‌نامه ترجیحی، القاب، نام شخصیت‌ها…',
   explicit_title:'ترجمه بدون سانسور', explicit_desc:'محتوای بزرگسال یا نامناسب را دقیق و بدون سانسور ترجمه کن.',
+  overlap_context_title:'زمینه‌ی هم‌پوشان', overlap_context_desc:'آخرین ۵ خط بلوک قبلی به‌عنوان متن مرجع ارسال می‌شود تا جمله‌هایی که از مرز بین دو بلوک عبور می‌کنند، لحن طبیعی و یکدست خود را حفظ کنند.',
   cache_title:'کش ترجمه', cache_desc:'با وارد کردن دوباره فایلی که قبلاً ترجمه کرده‌اید، ترجمه به‌طور خودکار از همان‌جا ادامه می‌یابد. پاک کردن کش، پیشرفت ذخیره‌شده همه فایل‌ها را حذف می‌کند.',
   clear_cache:'پاک کردن کش',
   files_empty:'هنوز فایلی اضافه نشده است.', file_meta:'{lines} خط · {blocks} بلوک', remove_file_aria:'حذف {name}',
@@ -1481,7 +1489,7 @@ function updateStepBadges(){
 /* ============================================================
    PROMPT BUILDING & API CALLS
    ============================================================ */
-function buildInstructions(file){
+function buildInstructions(file, hasContext){
   const s = state.settings;
   const parts = [];
   parts.push(`You are a professional subtitle translator.`);
@@ -1494,11 +1502,36 @@ function buildInstructions(file){
   if(file.format==='ass'){
     parts.push(`The source may contain ASS/SSA override tags in curly braces like {\\i1} or {\\pos(x,y)} — keep these tags unchanged and only translate the natural-language text around them.`);
   }
+  if(hasContext){
+    parts.push(`You will also be given a block called CONTEXT_ONLY: the final lines of the PREVIOUS block, each with the original text and the translation that was already produced for it. This is background only — a sentence, thought, or tone may carry over the boundary from those lines into the first line of the NEW block. Read CONTEXT_ONLY to understand what was just said and how it was phrased, and use that understanding only to help you choose natural, consistent phrasing for the NEW block — this matters most for its first line. Never translate the CONTEXT_ONLY lines, never output translations for them, and never include them or their keys anywhere in your JSON response — your response must contain a translation for every line of the NEW block only, and nothing else.`);
+  }
   if(s.extraInstructions && s.extraInstructions.trim()){
     parts.push(`Additional instructions from the user: ${s.extraInstructions.trim()}`);
   }
   parts.push(`The input is a JSON object whose keys are line numbers (as strings) and whose values are that line's subtitle text. Respond with ONLY a JSON object of the exact form {"translations": {"<line number>": "<translation>", ...}}, reusing the exact same keys you were given — one translation per key, every key included, none added, removed, or renumbered. No markdown formatting, no code fences, and no commentary outside the JSON.`);
   return parts.join(' ');
+}
+
+/* ============================================================
+   OVERLAPPING CONTEXT (boundary continuity between blocks)
+   ============================================================ */
+// Returns up to CONTEXT_LINES_COUNT {original, translated} pairs taken from
+// the END of the block immediately preceding `block` WITHIN THE SAME FILE
+// (file.blocks is per-file, so this never crosses file boundaries — the
+// first block of every file always has index 0 and therefore no context).
+function getContextLinesForBlock(file, block){
+  if(!state.settings.overlappingContext) return null;
+  const blocks = file && file.blocks;
+  if(!blocks || !blocks.length) return null;
+  const idx = blocks.indexOf(block);
+  if(idx <= 0) return null; // first block of the file (or block not found) → no prior context
+  const prevBlock = blocks[idx-1];
+  if(!prevBlock || !prevBlock.entries || !prevBlock.entries.length) return null;
+  const tail = prevBlock.entries.slice(-CONTEXT_LINES_COUNT);
+  const pairs = tail
+    .filter(e=> typeof e.translated==='string' && e.translated.trim()!=='')
+    .map(e=> ({ original: e.text, translated: e.translated }));
+  return pairs.length ? pairs : null;
 }
 
 function parseModelJSON(raw, expectedCount){
@@ -1564,12 +1597,18 @@ function parseSSEChatContent(raw){
   return content;
 }
 
-async function callTranslateAPI(profile, apiKey, lines, instructions){
+async function callTranslateAPI(profile, apiKey, lines, instructions, contextLines){
   const endpoint = (profile.endpoint||'').replace(/\/+$/,'');
   const indexed = {};
   lines.forEach((l,i)=>{ indexed[String(i+1)] = l; });
   const payload = JSON.stringify(indexed);
-  const userText = `Translate this JSON object of ${lines.length} subtitle line(s):\n${payload}`;
+  let userText = '';
+  if(contextLines && contextLines.length){
+    const ctxIndexed = {};
+    contextLines.forEach((c,i)=>{ ctxIndexed[String(i+1)] = { original: c.original, translated: c.translated }; });
+    userText += `CONTEXT_ONLY — last ${contextLines.length} line(s) of the PREVIOUS block, already translated. Reference only: do NOT translate, do NOT include in your output.\n${JSON.stringify(ctxIndexed)}\n\n`;
+  }
+  userText += `Translate this JSON object of ${lines.length} subtitle line(s) of the NEW block:\n${payload}`;
   const userPrompt = `${instructions}\n\n${userText}`;
 
   try{
@@ -1636,7 +1675,8 @@ async function translateBlock(file, block){
   block.status = 'translating'; block.error = null;
   renderTranslatePanel();
 
-  const baseInstructions = buildInstructions(file);
+  const contextLines = getContextLinesForBlock(file, block);
+  const baseInstructions = buildInstructions(file, !!contextLines);
   const retryNote = ' IMPORTANT: A previous attempt was missing translations for some of these exact lines — this request contains only those missing lines, renumbered starting at 1. You must include every single key in your response, with no omissions.';
 
   let pending = block.entries.slice();
@@ -1648,7 +1688,7 @@ async function translateBlock(file, block){
       const lines = pending.map(e=>e.text);
       let result;
       try{
-        result = await callTranslateAPI(profile, apiKey, lines, instructions);
+        result = await callTranslateAPI(profile, apiKey, lines, instructions, contextLines);
       }catch(err){
         lastErr = err;
         break;
@@ -1951,6 +1991,7 @@ function renderPrefsForm(){
   updateTemperatureDescription();
   $('#extraInstructions').value = state.settings.extraInstructions;
   $('#explicitToggle').checked = !!state.settings.explicit;
+  $('#overlapContextToggle').checked = !!state.settings.overlappingContext;
 }
 function wirePrefsAutosave(){
   $('#targetLanguage').addEventListener('input', ()=>{ state.settings.targetLanguage = $('#targetLanguage').value; saveSettings(); });
@@ -1963,6 +2004,7 @@ function wirePrefsAutosave(){
   });
   $('#extraInstructions').addEventListener('input', ()=>{ state.settings.extraInstructions = $('#extraInstructions').value; saveSettings(); });
   $('#explicitToggle').addEventListener('change', ()=>{ state.settings.explicit = $('#explicitToggle').checked; saveSettings(); });
+  $('#overlapContextToggle').addEventListener('change', ()=>{ state.settings.overlappingContext = $('#overlapContextToggle').checked; saveSettings(); });
   $('#clearCacheBtn').addEventListener('click', async ()=>{
     if(!confirm(t('confirm_clear_cache'))) return;
     try{
