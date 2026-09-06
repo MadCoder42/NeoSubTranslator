@@ -1503,13 +1503,13 @@ function buildInstructions(file, hasContext){
     parts.push(`The source may contain ASS/SSA override tags in curly braces like {\\i1} or {\\pos(x,y)} — keep these tags unchanged and only translate the natural-language text around them.`);
   }
   if(hasContext){
-    parts.push(`You will also be given a block called CONTEXT_ONLY: the final lines of the PREVIOUS block, each with the original text and the translation that was already produced for it. This is background only — a sentence, thought, or tone may carry over the boundary from those lines into the first line of the NEW block. Read CONTEXT_ONLY to understand what was just said and how it was phrased, and use that understanding only to help you choose natural, consistent phrasing for the NEW block — this matters most for its first line. Never translate the CONTEXT_ONLY lines, never output translations for them, and never include them or their keys anywhere in your JSON response — your response must contain a translation for every line of the NEW block only, and nothing else.`);
+    parts.push(`You will also be given a section called CONTEXT_ONLY, formatted as plain text (not JSON): the final lines of the PREVIOUS block, each shown with its original text and the translation that was already produced for it. This is background only — a sentence, thought, or tone may carry over the boundary from those lines into the first line of the NEW block. Read CONTEXT_ONLY to understand what was just said and how it was phrased, and use that understanding only to choose natural, consistent phrasing for the NEW block — this matters most for its first line. Never translate the CONTEXT_ONLY lines, never output anything for them, and never include them anywhere in your JSON response — your JSON response must contain a translation for every line of the NEW block only, under the "translations" key, and nothing else.`);
   }
   if(s.extraInstructions && s.extraInstructions.trim()){
     parts.push(`Additional instructions from the user: ${s.extraInstructions.trim()}`);
   }
-  parts.push(`The input is a JSON object whose keys are line numbers (as strings) and whose values are that line's subtitle text. Respond with ONLY a JSON object of the exact form {"translations": {"<line number>": "<translation>", ...}}, reusing the exact same keys you were given — one translation per key, every key included, none added, removed, or renumbered. No markdown formatting, no code fences, and no commentary outside the JSON.`);
-  return parts.join(' ');
+  parts.push(`The NEW block is a JSON object whose keys are line numbers (as strings) and whose values are that line's subtitle text. Respond with ONLY a JSON object of the exact form {"translations": {"<line number>": "<translation>", ...}}, reusing the exact same keys you were given — one translation per key, every key included, none added, removed, or renumbered. The literal key "translations" must be present at the top level. No markdown formatting, no code fences, and no commentary outside the JSON.`);
+  return parts.join('\n');
 }
 
 /* ============================================================
@@ -1534,14 +1534,40 @@ function getContextLinesForBlock(file, block){
   return pairs.length ? pairs : null;
 }
 
+function looksLikeTranslationsMap(x){
+  if(Array.isArray(x)) return x.length>0 && x.every(v=> typeof v==='string' || v==null);
+  if(x && typeof x==='object' && !Array.isArray(x)){
+    const vals = Object.values(x);
+    return vals.length>0 && vals.every(v=> typeof v==='string' || v==null);
+  }
+  return false;
+}
+
 function parseModelJSON(raw, expectedCount){
   let s = String(raw||'').trim();
   s = s.replace(/^```[a-z]*\n?/i,'').replace(/```$/,'').trim();
   const first = s.indexOf('{'); const last = s.lastIndexOf('}');
   if(first!==-1 && last!==-1 && last>first) s = s.slice(first, last+1);
   const obj = JSON.parse(s);
-  if(!obj || obj.translations==null) throw new Error(t('err_translations_missing'));
-  const tr = obj.translations;
+  if(!obj || typeof obj!=='object') throw new Error(t('err_translations_missing'));
+
+  let tr = obj.translations;
+  if(tr==null){
+    // Some models drop the "translations" wrapper. Recover gracefully rather
+    // than failing outright: accept the object itself if it already looks
+    // like a line-number → translation map, or unwrap a single differently
+    // named top-level key if THAT looks like the map instead.
+    if(looksLikeTranslationsMap(obj)){
+      tr = obj;
+    } else {
+      const keys = Object.keys(obj);
+      if(keys.length===1 && looksLikeTranslationsMap(obj[keys[0]])){
+        tr = obj[keys[0]];
+      }
+    }
+  }
+  if(tr==null) throw new Error(t('err_translations_missing'));
+
   const out = new Array(expectedCount).fill(undefined);
   if(Array.isArray(tr)){
     for(let i=0;i<Math.min(expectedCount, tr.length);i++){
@@ -1602,13 +1628,22 @@ async function callTranslateAPI(profile, apiKey, lines, instructions, contextLin
   const indexed = {};
   lines.forEach((l,i)=>{ indexed[String(i+1)] = l; });
   const payload = JSON.stringify(indexed);
+  const keyList = Object.keys(indexed).join(', ');
+
   let userText = '';
   if(contextLines && contextLines.length){
-    const ctxIndexed = {};
-    contextLines.forEach((c,i)=>{ ctxIndexed[String(i+1)] = { original: c.original, translated: c.translated }; });
-    userText += `CONTEXT_ONLY — last ${contextLines.length} line(s) of the PREVIOUS block, already translated. Reference only: do NOT translate, do NOT include in your output.\n${JSON.stringify(ctxIndexed)}\n\n`;
+    // Deliberately NOT shaped like JSON here: it sits right next to the
+    // payload the model must translate, and an earlier version represented
+    // it as a similarly-keyed JSON object, which some models ended up
+    // mimicking in their response instead of the required {"translations":…}
+    // wrapper. Plain text avoids that shape-confusion entirely.
+    const ctxText = contextLines.map((c,i)=>
+      `${i+1}. previous original: ${JSON.stringify(c.original)}\n   previous translation (already final, for reference): ${JSON.stringify(c.translated)}`
+    ).join('\n');
+    userText += `----- CONTEXT_ONLY (plain reference text, not JSON, not something to translate or return) -----\n${ctxText}\n----- END CONTEXT_ONLY -----\n\n`;
   }
-  userText += `Translate this JSON object of ${lines.length} subtitle line(s) of the NEW block:\n${payload}`;
+  userText += `Translate this JSON object of ${lines.length} subtitle line(s) — this is the ONLY thing to translate:\n${payload}\n\n`
+    + `Respond now with ONLY a JSON object of the exact form {"translations": {${lines.map((_,i)=>`"${i+1}": "..."`).join(', ')}}}. It must contain the literal key "translations", and exactly these ${lines.length} key(s): ${keyList}. No other top-level key, no extra keys, no omissions, no markdown, no commentary.`;
   const userPrompt = `${instructions}\n\n${userText}`;
 
   try{
