@@ -547,6 +547,11 @@ html[dir="rtl"] .temp-desc-main .temp-default-tag{margin-left:0; margin-right:4p
         <input type="number" id="cooldownInput" min="0" step="0.5" value="1">
       </div>
       <div class="field">
+        <label for="blockRetryInput" data-i18n="field_block_retry">Retry attempts for a failed block</label>
+        <input type="number" id="blockRetryInput" min="1" max="20" step="1" value="3">
+        <div class="desc" data-i18n="field_block_retry_desc">If a block fails to translate, it is retried this many times before the process moves on to the next block.</div>
+      </div>
+      <div class="field">
         <div class="field-label-row">
           <label for="temperatureInput" data-i18n="field_temperature">Temperature</label>
           <span class="temp-value" id="temperatureValue">0.4</span>
@@ -605,6 +610,7 @@ const state = {
     targetLanguage: 'Spanish',
     tone: 'Neutral',
     cooldownSec: 1,
+    blockRetryAttempts: 3,
     temperature: 0.4,
     extraInstructions: '',
     explicit: false,
@@ -652,6 +658,8 @@ en:{
   field_tone:'Tone', tone_neutral:'Neutral', tone_formal:'Formal', tone_casual:'Casual', tone_playful:'Playful',
   tone_dramatic:'Dramatic', tone_literal:'Literal / word-for-word', tone_poetic:'Poetic',
   field_cooldown:'Cooldown between blocks (seconds)',
+  field_block_retry:'Retry attempts for a failed block',
+  field_block_retry_desc:'If a block fails to translate, it is retried this many times before the process moves on to the next block.',
   field_temperature:'Temperature',
   temp_main_conservative:'Very precise and conservative', temp_sub_conservative:'(Technical, legal, data-driven translation, sensitive texts)',
   temp_main_faithful:'Precise and faithful', temp_sub_faithful:'(Professional, educational, specialized translation)',
@@ -681,6 +689,7 @@ en:{
   toast_no_model_selected:'Select a model for your endpoint in Settings.',
   toast_no_api_key:'No API key found for the active endpoint.',
   toast_block_failed:'Block failed: {msg}',
+  toast_block_retrying:'Block failed, retrying (attempt {attempt}/{max})…',
   toast_enter_endpoint_url:'Enter an endpoint URL.', toast_endpoint_saved:'Endpoint saved',
   toast_enter_endpoint_url_first:'Enter an endpoint URL first.', toast_enter_api_key_first:'Enter an API key first.',
   toast_no_models_returned:'No models returned by this endpoint.', toast_loaded_models:'Loaded {count} models',
@@ -730,6 +739,8 @@ fa:{
   field_tone:'لحن', tone_neutral:'خنثی', tone_formal:'رسمی', tone_casual:'محاوره‌ای', tone_playful:'شوخ‌طبعانه',
   tone_dramatic:'دراماتیک', tone_literal:'تحت‌اللفظی / کلمه‌به‌کلمه', tone_poetic:'شاعرانه',
   field_cooldown:'فاصله زمانی بین بلوک‌ها (ثانیه)',
+  field_block_retry:'تعداد تلاش مجدد برای بلوک ناموفق',
+  field_block_retry_desc:'اگر ترجمه یک بلوک با خطا مواجه شود، پیش از رفتن به بلوک بعدی، به همین تعداد دوباره تلاش می‌شود.',
   field_temperature:'دما (Temperature)',
   temp_main_conservative:'بسیار دقیق و محافظه‌کارانه', temp_sub_conservative:'(ترجمه فنی، حقوقی، مبتنی بر داده، متون حساس)',
   temp_main_faithful:'دقیق و وفادار به متن', temp_sub_faithful:'(ترجمه حرفه‌ای، آموزشی، تخصصی)',
@@ -759,6 +770,7 @@ fa:{
   toast_no_model_selected:'در تنظیمات، یک مدل برای اتصال خود انتخاب کنید.',
   toast_no_api_key:'کلید API برای اتصال فعال یافت نشد.',
   toast_block_failed:'بلوک با خطا مواجه شد: {msg}',
+  toast_block_retrying:'بلوک با خطا مواجه شد، تلاش دوباره (تلاش {attempt} از {max})…',
   toast_enter_endpoint_url:'آدرس اتصال را وارد کنید.', toast_endpoint_saved:'اتصال ذخیره شد',
   toast_enter_endpoint_url_first:'ابتدا آدرس اتصال را وارد کنید.', toast_enter_api_key_first:'ابتدا کلید API را وارد کنید.',
   toast_no_models_returned:'این اتصال هیچ مدلی برنگرداند.', toast_loaded_models:'{count} مدل بارگذاری شد',
@@ -1699,7 +1711,8 @@ async function callTranslateAPI(profile, apiKey, lines, instructions, contextLin
   }
 }
 
-async function translateBlock(file, block){
+async function translateBlock(file, block, opts){
+  opts = opts || {};
   if(!block.entries.length) return;
   const profile = getActiveProfile();
   if(!profile){ toast(t('toast_no_active_endpoint'), 'error'); openSettings('profiles'); return; }
@@ -1740,7 +1753,7 @@ async function translateBlock(file, block){
     if(pending.length){
       block.status = 'error';
       block.error = lastErr ? (lastErr.message || String(lastErr)) : t('err_lines_missing', {missing:pending.length, total:block.entries.length});
-      toast(t('toast_block_failed', {msg:block.error}), 'error');
+      if(!opts.silent) toast(t('toast_block_failed', {msg:block.error}), 'error');
     } else {
       block.status = 'done';
       block.error = null;
@@ -1749,7 +1762,7 @@ async function translateBlock(file, block){
   }catch(err){
     block.status = 'error';
     block.error = err.message || String(err);
-    toast(t('toast_block_failed', {msg:block.error}), 'error');
+    if(!opts.silent) toast(t('toast_block_failed', {msg:block.error}), 'error');
   }
   renderTranslatePanel();
   renderDownloadPanel();
@@ -1772,7 +1785,26 @@ async function translateBlocksOfFile(file){
     while(TR.paused && !TR.cancel) await sleep(200);
     if(TR.cancel) return;
     if(block.status==='done') continue;
-    await translateBlock(file, block);
+
+    // Retry this same block on failure (instead of moving on) up to the
+    // user-configured number of attempts before giving up and continuing.
+    const maxBlockAttempts = Math.max(1, parseInt(state.settings.blockRetryAttempts, 10) || 1);
+    for(let attempt=1; attempt<=maxBlockAttempts; attempt++){
+      if(TR.cancel) return;
+      while(TR.paused && !TR.cancel) await sleep(200);
+      if(TR.cancel) return;
+
+      await translateBlock(file, block, {silent: attempt<maxBlockAttempts});
+      if(TR.cancel) return;
+
+      if(block.status !== 'error') break; // succeeded, move on to next block
+
+      if(attempt < maxBlockAttempts){
+        toast(t('toast_block_retrying', {attempt: attempt+1, max: maxBlockAttempts}), 'error');
+        await cooldownWait(state.settings.cooldownSec);
+      }
+    }
+
     if(TR.cancel) return;
     await cooldownWait(state.settings.cooldownSec);
   }
@@ -2022,6 +2054,7 @@ function renderPrefsForm(){
   $('#targetLanguage').value = state.settings.targetLanguage;
   $('#toneSelect').value = state.settings.tone;
   $('#cooldownInput').value = state.settings.cooldownSec;
+  $('#blockRetryInput').value = state.settings.blockRetryAttempts;
   $('#temperatureInput').value = state.settings.temperature;
   updateTemperatureDescription();
   $('#extraInstructions').value = state.settings.extraInstructions;
@@ -2032,6 +2065,7 @@ function wirePrefsAutosave(){
   $('#targetLanguage').addEventListener('input', ()=>{ state.settings.targetLanguage = $('#targetLanguage').value; saveSettings(); });
   $('#toneSelect').addEventListener('change', ()=>{ state.settings.tone = $('#toneSelect').value; saveSettings(); });
   $('#cooldownInput').addEventListener('input', ()=>{ state.settings.cooldownSec = parseFloat($('#cooldownInput').value)||0; saveSettings(); });
+  $('#blockRetryInput').addEventListener('input', ()=>{ state.settings.blockRetryAttempts = Math.max(1, parseInt($('#blockRetryInput').value)||1); saveSettings(); });
   $('#temperatureInput').addEventListener('input', ()=>{
     state.settings.temperature = parseFloat($('#temperatureInput').value)||0;
     updateTemperatureDescription();
